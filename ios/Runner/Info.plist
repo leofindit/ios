@@ -10,6 +10,12 @@
 		<string>Location info improves nearby tracker detection accuracy.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>LEOFindIt needs location access to detect nearby Bluetooth trackers.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>bluetooth-central</string>
+			<string>location</string>
+			<string>bluetooth-peripheral</string>
+		</array>
 		<key>NSLocalNetworkUsageDescription</key>
 		<string>Required for secure BLE discovery.</string>
 		<key>UIApplicationExitsOnSuspend</key>
@@ -19,7 +25,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Leofindit Ios</string>
+		<string>LEO Find It</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>

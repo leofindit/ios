@@ -1,195 +1,73 @@
 // ---------------------------
-// File: LEOFindIt_iOS/ios/Runner/BluetoothManager.swift
+// leofindit_ios/ios/Runner/BluetoothManager.swift
+// send invokeMethod("onDevice", payload)
+// Channel owned by AppDelegate: "leo_find_it/scanner"
 // ---------------------------
+
 import CoreBluetooth
+import Flutter
 import Foundation
 
-#if canImport(Flutter)
-  import Flutter
-#else
-  public typealias FlutterEventSink = (Any?) -> Void
+final class BluetoothManager: NSObject, CBCentralManagerDelegate {
 
-  public class FlutterError: Error {
-    public var code: String?
-    public var message: String?
-    public var details: Any?
+  // ===== Contract constants (match Android) =====
+  private let TX_POWER: Double = -59.0  // same assumption used on Android distance estimate
+  private let PATH_LOSS_N: Double = 2.0  // indoor-ish
+  private let TRACKER_TTL_MS: Int64 = 30_000  // similar spirit to Android TTL eviction
 
-    public init(_ code: String? = nil, _ message: String? = nil, _ details: Any? = nil) {
-      self.code = code
-      self.message = message
-      self.details = details
-    }
+  private let channel: FlutterMethodChannel
+  private var central: CBCentralManager!
+
+  private var scanning = false
+
+  // Minimal state so we can emit stable "signature" + TTL eviction
+  private struct TrackerState {
+    var lastSeenMs: Int64
+    var firstSeenMs: Int64
+    var sightings: Int
+    var rotatingMacCount: Int  // iOS can't read MAC -> stays 0
+    var rawFrame: String
+    var kind: String
+    var lastRssi: Int
   }
 
-  public protocol FlutterStreamHandler {
-    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
-      -> FlutterError?
-    func onCancel(withArguments arguments: Any?) -> FlutterError?
-  }
-#endif
+  private var states: [String: TrackerState] = [:]  // signature -> state
 
-// Tracker Stats for Indirect AirTag Detection
-
-private struct TrackerStats {
-  var firstSeen: Date
-  var lastSeen: Date
-  var rssiSamples: [Int]
-  var isConnectable: Bool
-}
-
-class BluetoothManager: NSObject,
-  CBCentralManagerDelegate,
-  CBPeripheralDelegate,
-  FlutterStreamHandler
-{
-
-  private var centralManager: CBCentralManager!
-  private var eventSink: FlutterEventSink?
-
-  private var peripherals: [UUID: CBPeripheral] = [:]
-  private var trackerStats: [UUID: TrackerStats] = [:]
-
-  private var wantsScan: Bool = false
-
-  override init() {
+  init(channel: FlutterMethodChannel) {
+    self.channel = channel
     super.init()
-    centralManager = CBCentralManager(
-      delegate: self,
-      queue: nil,
-      options: [CBCentralManagerOptionShowPowerAlertKey: true]
-    )
+    self.central = CBCentralManager(delegate: self, queue: nil)
   }
 
-  // Public API Exposed to Flutter
-
+  // ===== Flutter -> iOS =====
   func startScan() {
-    wantsScan = true
-
-    // Start scan only when user presses Start.
-    // If Bluetooth isn't ready, do NOT auto-start later.
-    if centralManager.state != .poweredOn {
-      print("Bluetooth not powered on — cannot start scan.")
-      eventSink?(["type": "error", "code": "bluetooth_not_ready"])
+    guard central.state == .poweredOn else {
+      // Flutter side doesn’t currently listen for an error callback in BleBridge,
+      // so we just no-op. (You can add a "onError" later if you want.)
       return
     }
+    if scanning { return }
+    scanning = true
 
-    centralManager.scanForPeripherals(
+    // We scan broadly (same as Android startScan(null,...)).
+    central.scanForPeripherals(
       withServices: nil,
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
     )
-    print("BLE scan started")
   }
 
   func stopScan() {
-    wantsScan = false
-    centralManager.stopScan()
-    print("BLE scan stopped")
+    if !scanning { return }
+    scanning = false
+    central.stopScan()
   }
 
-  func makeItSing(deviceId: String) {
-    guard let uuid = UUID(uuidString: deviceId),
-      let peripheral = peripherals[uuid]
-    else { return }
-    centralManager.connect(peripheral, options: nil)
-  }
-
-  // Update Stats for a Device
-
-  private func updateStats(
-    for peripheral: CBPeripheral,
-    advertisementData: [String: Any],
-    rssi: Int
-  ) -> TrackerStats {
-
-    let now = Date()
-    let uuid = peripheral.identifier
-    let isConnectable =
-      (advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber)?.boolValue ?? false
-
-    if var stats = trackerStats[uuid] {
-      stats.lastSeen = now
-      stats.rssiSamples.append(rssi)
-      if stats.rssiSamples.count > 50 {
-        stats.rssiSamples.removeFirst()  // prevent unbounded growth
-      }
-      stats.isConnectable = stats.isConnectable || isConnectable
-      trackerStats[uuid] = stats
-      return stats
-    } else {
-      let stats = TrackerStats(
-        firstSeen: now,
-        lastSeen: now,
-        rssiSamples: [rssi],
-        isConnectable: isConnectable
-      )
-      trackerStats[uuid] = stats
-      return stats
-    }
-  }
-
-  // Indirect AirTag / Tracker Suspicion Score (0.0 – 1.0)
-
-  private func computeSuspicionScore(stats: TrackerStats, name: String?) -> Double {
-    var score: Double = 0.0
-
-    // 1) Unknown / empty name → more suspicious
-    if name == nil || name == "Unknown" || name?.isEmpty == true {
-      score += 0.3
-    }
-
-    // 2) Non-connectable beacon → like AirTag / Find My accessory
-    if stats.isConnectable == false {
-      score += 0.3
-    }
-
-    // 3) Seen for a while (persistent nearby presence)
-    let duration = stats.lastSeen.timeIntervalSince(stats.firstSeen)
-    if duration > 5 * 60 {  // > 5 minutes
-      score += 0.2
-    }
-    if duration > 10 * 60 {  // > 10 minutes
-      score += 0.1
-    }
-
-    // 4) RSSI stability (device "following" you, not jumping around)
-    let values = stats.rssiSamples
-    if values.count >= 3 {
-      let mean = Double(values.reduce(0, +)) / Double(values.count)
-      let variance =
-        values.map { pow(Double($0) - mean, 2.0) }
-        .reduce(0.0, +) / Double(values.count)
-      let stdDev = sqrt(variance)
-
-      // Typical "following distance" range and stability
-      if mean > -80 && mean < -30 && stdDev < 10 {
-        score += 0.2
-      }
-    }
-
-    // Clamp to [0,1]
-    return min(1.0, max(0.0, score))
-  }
-
-  // MARK: - CBCentralManagerDelegate
-
+  // ===== CBCentralManagerDelegate =====
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
-    switch central.state {
-    case .poweredOn:
-      print("Bluetooth is ON")
-    // Do NOT auto-start scanning — only when StartScan is pressed
-    case .poweredOff:
-      print("Bluetooth is OFF")
-      centralManager.stopScan()
-    case .resetting:
-      print("Bluetooth resetting")
-    case .unauthorized:
-      print("Bluetooth unauthorized")
-    case .unsupported:
-      print("Bluetooth unsupported")
-    case .unknown:
-      print("Bluetooth state unknown")
-    @unknown default:
-      print("Bluetooth state unknown (future case)")
+    // Do nothing here — scan starts only when Flutter calls startScan,
+    // matching the Android UX.
+    if central.state != .poweredOn {
+      stopScan()
     }
   }
 
@@ -199,71 +77,109 @@ class BluetoothManager: NSObject,
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-    let rssiValue = RSSI.intValue
-    if rssiValue == 127 { return }  // invalid RSSI
 
-    peripherals[peripheral.identifier] = peripheral
-    let name = peripheral.name ?? "Unknown"
+    // iOS uses 127 as invalid RSSI (ignore those)
+    let rssi = RSSI.intValue
+    if rssi == 127 { return }
 
-    let stats = updateStats(
-      for: peripheral,
-      advertisementData: advertisementData,
-      rssi: rssiValue
+    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+    // TTL eviction (prevents phantom buildup)
+    states = states.filter { nowMs - $0.value.lastSeenMs <= TRACKER_TTL_MS }
+
+    // ---- Determine "kind" (best-effort, mirrors Android categories) ----
+    let kind = classifyKind(advertisementData: advertisementData)
+
+    // ---- signature: stable identity for Flutter merge logic ----
+    // Android derives signature from non-rotating bytes; on iOS we often can't see the same raw data,
+    // so we use a stable surrogate: peripheral UUID + kind
+    let signature = "IOS_\(kind)_\(peripheral.identifier.uuidString)"
+
+    // ---- raw frame (hex) best-effort ----
+    // iOS does not expose full scanRecord bytes like Android.
+    // We store manufacturer data (if present) as hex.
+    let rawFrame = extractManufacturerHex(advertisementData: advertisementData)
+
+    // ---- update state ----
+    let prev = states[signature]
+    let firstSeen = prev?.firstSeenMs ?? nowMs
+    let sightings = (prev?.sightings ?? 0) + 1
+
+    states[signature] = TrackerState(
+      lastSeenMs: nowMs,
+      firstSeenMs: firstSeen,
+      sightings: sightings,
+      rotatingMacCount: 0,  // iOS cannot read device MAC
+      rawFrame: rawFrame,
+      kind: kind,
+      lastRssi: rssi
     )
 
-    let suspicionScore = computeSuspicionScore(stats: stats, name: peripheral.name)
-    let probability = Int(suspicionScore * 100.0)
-    let isSuspicious = suspicionScore >= 0.6
+    // ---- distance estimate (meters) ----
+    let distanceMeters = estimateDistanceMeters(rssi: rssi)
 
-    let seenDuration = Int(stats.lastSeen.timeIntervalSince(stats.firstSeen))
-
-    let device: [String: Any] = [
-      "type": "device",
-      "name": name,
-      "id": peripheral.identifier.uuidString,
-      "rssi": rssiValue,
-      "airTagScore": suspicionScore,
-      "probability": probability,
-      "isSuspicious": isSuspicious,
-      "isConnectable": stats.isConnectable,
-      "seenSeconds": seenDuration,
-      "sampleCount": stats.rssiSamples.count,
+    // ---- payload MUST match Android/Flutter expectations ----
+    // (TrackerDevice.fromNative reads these keys)
+    // See Android sendToFlutter payload fields. :contentReference[oaicite:4]{index=4}
+    let payload: [String: Any] = [
+      "id": "\(kind)_\(signature)",
+      "logicalId": "\(kind)_\(signature)",
+      "address": NSNull(),  // iOS: not available
+      "mac": "",  // iOS: not available
+      "kind": kind,
+      "rssi": rssi,
+      "distanceMeters": distanceMeters,
+      "lastSeenMs": Int(nowMs),
+      "signature": signature,
+      "rawFrame": rawFrame,
+      "rotatingMacCount": 0,
     ]
 
-    eventSink?(device)
+    // Native -> Flutter callback: onDevice (matches BleBridge) :contentReference[oaicite:5]{index=5}
+    channel.invokeMethod("onDevice", arguments: payload)
   }
 
-  func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    peripheral.delegate = self
-    peripheral.discoverServices(nil)
+  // ===== Helpers =====
+
+  private func estimateDistanceMeters(rssi: Int) -> Double {
+    // same shape as Android: 10 ^ ((txPower - rssi) / (10*n))
+    let ratio = (TX_POWER - Double(rssi)) / (10.0 * PATH_LOSS_N)
+    return pow(10.0, ratio)
   }
 
-  func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-    guard error == nil else { return }
-    peripheral.services?.forEach { service in
-      peripheral.discoverCharacteristics(nil, for: service)
+  private func classifyKind(advertisementData: [String: Any]) -> String {
+    // Manufacturer Data starts with Company ID (little-endian, 2 bytes)
+    if let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
+      mfg.count >= 2
+    {
+      let b0 = UInt16(mfg[mfg.startIndex])
+      let b1 = UInt16(mfg[mfg.startIndex + 1])
+      let companyId = b0 | (b1 << 8)
+
+      // Match Android IDs:
+      // Apple 0x004C, Samsung 0x0075, Tile 0x0131 :contentReference[oaicite:6]{index=6}
+      if companyId == 0x004C {
+        // Could be Apple device or Find My accessory. We'll label as APPLE_DEVICE.
+        return "APPLE_DEVICE"
+      }
+      if companyId == 0x0075 { return "SAMSUNG" }
+      if companyId == 0x0131 { return "TILE" }
     }
+
+    // Try service UUID heuristic for Find My (FD44 appears in Android scanner) :contentReference[oaicite:7]{index=7}
+    if let uuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
+      if uuids.contains(where: { $0.uuidString.uppercased().contains("FD44") }) {
+        return "AIRTAG"
+      }
+    }
+
+    return "UNKNOWN"
   }
 
-  func peripheral(
-    _ peripheral: CBPeripheral,
-    didDiscoverCharacteristicsFor service: CBService,
-    error: Error?
-  ) {
-  }
-
-  // FlutterStreamHandler
-
-  func onListen(
-    withArguments arguments: Any?,
-    eventSink events: @escaping FlutterEventSink
-  ) -> FlutterError? {
-    self.eventSink = events
-    return nil
-  }
-
-  func onCancel(withArguments arguments: Any?) -> FlutterError? {
-    eventSink = nil
-    return nil
+  private func extractManufacturerHex(advertisementData: [String: Any]) -> String {
+    guard let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data else {
+      return ""
+    }
+    return mfg.map { String(format: "%02x", $0) }.joined()
   }
 }

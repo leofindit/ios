@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+import 'models.dart';
+import 'device_marks.dart';
+
+class IdentificationPage extends StatelessWidget {
+  final List<TrackerDevice> devices;
+
+  const IdentificationPage({required this.devices, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: DeviceMarks.version,
+      builder: (_, __, ___) {
+        final Map<String, TrackerDevice> unique = {};
+        for (final d in devices) {
+          unique[d.signature] = d;
+        }
+
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+        final qualified = unique.values.where((d) {
+          if (d.distance <= 0) return false;
+          if (nowMs - d.lastSeenMs > 30 * 1000) return false;
+          return true;
+        }).toList();
+
+        final friendly = <TrackerDevice>[];
+        final unknown = <TrackerDevice>[];
+
+        for (final d in qualified) {
+          final mark = DeviceMarks.get(d.signature);
+          if (mark == DeviceMark.friendly) {
+            friendly.add(d);
+          } else if (mark == DeviceMark.unknown) {
+            unknown.add(d);
+          }
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            _sectionTitle('Friendly'),
+            if (friendly.isEmpty)
+              _emptyHint('No friendly devices yet')
+            else
+              ...friendly.map(_tile),
+
+            const SizedBox(height: 24),
+
+            _sectionTitle('Unknown'),
+            if (unknown.isEmpty)
+              _emptyHint('No unknown devices yet')
+            else
+              ...unknown.map(_tile),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyHint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 13,
+          color: Colors.grey[600],
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(TrackerDevice d) {
+    IconData icon;
+
+    if (d.displayName.contains('AirTag')) {
+      icon = Icons.apple;
+    } else if (d.displayName.contains('Tile')) {
+      icon = Icons.location_searching;
+    } else if (d.displayName.contains('Samsung')) {
+      icon = Icons.radio_button_checked;
+    } else {
+      icon = Icons.bluetooth;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(
+          d.displayName,
+          style: const TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          'Last seen ${(DateTime.now().millisecondsSinceEpoch - d.lastSeenMs) ~/ 1000}s ago',
+        ),
+        trailing: Text(
+          '${d.distance.toStringAsFixed(1)} m',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
+
+// Using google icons for icons here:
+// https://fonts.google.com/icons?selected=Material+Symbols+Outlined:stacks:FILL@0;wght@400;GRAD@0;opsz@24&icon.size=24&icon.color=%23e3e3e3
