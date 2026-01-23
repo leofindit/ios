@@ -1,6 +1,9 @@
+// lib/identification_page.dart
+
 import 'package:flutter/material.dart';
 import 'models.dart';
 import 'device_marks.dart';
+import 'search_page.dart';
 
 class IdentificationPage extends StatelessWidget {
   final List<TrackerDevice> devices;
@@ -21,7 +24,17 @@ class IdentificationPage extends StatelessWidget {
 
         final qualified = unique.values.where((d) {
           if (d.distance <= 0) return false;
+
+          final mark = DeviceMarks.get(d.signature);
+
+          // If user marked it, keep it even if it's "stale"
+          if (mark == DeviceMark.friendly || mark == DeviceMark.unknown) {
+            return true;
+          }
+
+          // Otherwise only show recently seen devices
           if (nowMs - d.lastSeenMs > 30 * 1000) return false;
+
           return true;
         }).toList();
 
@@ -44,7 +57,7 @@ class IdentificationPage extends StatelessWidget {
             if (friendly.isEmpty)
               _emptyHint('No friendly devices yet')
             else
-              ...friendly.map(_tile),
+              ...friendly.map((d) => _tile(context, d)),
 
             const SizedBox(height: 24),
 
@@ -52,7 +65,7 @@ class IdentificationPage extends StatelessWidget {
             if (unknown.isEmpty)
               _emptyHint('No unknown devices yet')
             else
-              ...unknown.map(_tile),
+              ...unknown.map((d) => _tile(context, d)),
           ],
         );
       },
@@ -88,7 +101,7 @@ class IdentificationPage extends StatelessWidget {
     );
   }
 
-  Widget _tile(TrackerDevice d) {
+  Widget _tile(BuildContext context, TrackerDevice d) {
     IconData icon;
 
     if (d.displayName.contains('AirTag')) {
@@ -104,6 +117,11 @@ class IdentificationPage extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
+        onTap: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => SearchPage(device: d)));
+        },
         leading: Icon(icon),
         title: Text(
           d.displayName,

@@ -22,16 +22,9 @@ class BleBridge {
     });
   }
 
-  static Future<void> startScan({int? durationMs, Duration? duration}) async {
+  static Future<void> startScan() async {
     _attachOnce();
     await _ch.invokeMethod("startScan");
-
-    // Only auto-stop if a duration is explicitly provided.
-    if (durationMs != null || duration != null) {
-      final wait = duration ?? Duration(milliseconds: durationMs ?? 4000);
-      await Future.delayed(wait);
-      await stopScan();
-    }
   }
 
   static Future<void> stopScan() async {

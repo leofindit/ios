@@ -1,8 +1,5 @@
 // ---------------------------
 // leofindit_ios/ios/Runner/AppDelegate.swift
-// - Channel: "leo_find_it/scanner"
-// - Methods: startScan / stopScan
-// - Native -> Flutter callback: "onDevice"
 // ---------------------------
 
 import Flutter

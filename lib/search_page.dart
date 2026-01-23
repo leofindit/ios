@@ -1,3 +1,5 @@
+// lib/search_page.dart
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +32,7 @@ class _SearchPageState extends State<SearchPage>
   static const double _foundThresholdM = 0.10;
   static const double _foundReleaseM = 0.35;
   static const int _foundHoldMs = 1800;
+  static const double _foundReleaseRssi = -62; // approx 0.35m away not found
 
   int? _foundAtMs;
   bool _hapticFired = false;
@@ -85,9 +88,8 @@ class _SearchPageState extends State<SearchPage>
   // Helpers
 
   bool _isFound(TrackerDevice d) {
-    final dist = d.distanceM;
-    if (dist.isNaN) return false;
-    return dist >= 0 && dist <= _foundThresholdM;
+    // Consider found if within threshold
+    return d.smoothedRssi >= -55; // -50 stricter, -60 looser
   }
 
   String _feetLabel(double meters) {
@@ -141,7 +143,7 @@ class _SearchPageState extends State<SearchPage>
     // Smooth display distance (UI ONLY)
     final rawDist = d.distanceM;
     _displayDistanceM ??= rawDist;
-    _displayDistanceM = (_displayDistanceM! * 0.90) + (rawDist * 0.10);
+    _displayDistanceM = (_displayDistanceM! * 0.65) + (rawDist * 0.35);
 
     // FOUND logic
     if (_isFound(d)) {
@@ -163,7 +165,7 @@ class _SearchPageState extends State<SearchPage>
 
     if (_foundAtMs != null) {
       final held = now - _foundAtMs! < _foundHoldMs;
-      final stillClose = d.distanceM <= _foundReleaseM;
+      final stillClose = d.smoothedRssi >= _foundReleaseRssi;
 
       if (held || stillClose) {
         direction = 'FOUND';
@@ -295,7 +297,12 @@ class _SearchPageState extends State<SearchPage>
                       selectedColor: Colors.green,
                       onTap: () {
                         setState(() {
-                          DeviceMarks.set(d.signature, DeviceMark.friendly);
+                          final current = DeviceMarks.get(d.signature);
+                          if (current == DeviceMark.friendly) {
+                            DeviceMarks.clear(d.signature);
+                          } else {
+                            DeviceMarks.set(d.signature, DeviceMark.friendly);
+                          }
                         });
                       },
                     ),
@@ -309,7 +316,12 @@ class _SearchPageState extends State<SearchPage>
                       selectedColor: Colors.blueGrey,
                       onTap: () {
                         setState(() {
-                          DeviceMarks.set(d.signature, DeviceMark.unknown);
+                          final current = DeviceMarks.get(d.signature);
+                          if (current == DeviceMark.unknown) {
+                            DeviceMarks.clear(d.signature);
+                          } else {
+                            DeviceMarks.set(d.signature, DeviceMark.unknown);
+                          }
                         });
                       },
                     ),

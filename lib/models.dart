@@ -45,15 +45,23 @@ class TrackerDevice {
   bool get isLikelyAirTag => kind == 'AIRTAG';
   bool get isLikelyTile => kind == 'TILE';
 
-  bool get isLikelySamsung => kind == 'SAMSUNG';
-  bool get isLikelySmartTag => kind == 'SAMSUNG'; // alias for UI filters
+  bool get isLikelySamsung =>
+      kind == 'SAMSUNG' ||
+      kind == 'SAMSUNG_DEVICE' ||
+      kind == 'SAMSUNG_SMARTTAG';
 
   bool get isFound => distanceMeters <= 0.10;
 
   String get displayName {
     if (isLikelyAirTag) return 'Apple AirTag';
     if (isLikelyTile) return 'Tile Tracker';
-    if (isLikelySamsung) return 'Samsung SmartTag';
+
+    // Samsung
+    if (kind == 'SAMSUNG_SMARTTAG' || kind == 'SAMSUNG') {
+      return 'Samsung SmartTag';
+    }
+    if (kind == 'SAMSUNG_DEVICE') return 'Samsung BLE Device';
+
     if (kind.contains('APPLE')) return 'Apple Find My Device';
     return 'Unknown Tracker';
   }

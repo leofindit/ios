@@ -3,6 +3,7 @@
 // ---------------------------
 import 'package:flutter/material.dart';
 import 'models.dart';
+import 'search_page.dart';
 
 class AdvancedScannerView extends StatelessWidget {
   final List<TrackerDevice> devices;
@@ -85,6 +86,14 @@ class AdvancedScannerView extends StatelessWidget {
                             vertical: 4,
                           ),
                           child: ListTile(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SearchPage(device: d),
+                                ),
+                              );
+                            },
                             leading: Icon(
                               _rssiIcon(rssi),
                               color: _kindColor(d),

@@ -49,60 +49,6 @@ class DistancePage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
           child: Column(
             children: [
-              // Start/Stop Scan
-              ElevatedButton.icon(
-                icon: Icon(
-                  scanning ? Icons.stop : Icons.play_arrow,
-                  size: 28,
-                  color: Colors.blueAccent,
-                ),
-                label: Text(
-                  scanning ? 'Stop Scan' : 'Start Scan',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blueAccent,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade50,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 30,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    side: BorderSide(
-                      color: Colors.blueAccent.withOpacity(0.25),
-                      width: 1.2,
-                    ),
-                  ),
-                ),
-                onPressed: () async {
-                  await onRescan();
-                },
-              ),
-
-              const SizedBox(height: 10),
-
-              // Scan status text
-              Text(
-                scanning
-                    ? 'Scanning…'
-                    : lastScanTime == null
-                    ? 'No scans yet'
-                    : 'Last scan ${_formatTime()}',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
               // Show All Devices button
               OutlinedButton.icon(
                 icon: const Icon(
@@ -154,6 +100,60 @@ class DistancePage extends StatelessWidget {
                     ),
                   );
                 },
+              ),
+
+              const SizedBox(height: 10),
+              
+              // Start/Stop Scan
+              ElevatedButton.icon(
+                icon: Icon(
+                  scanning ? Icons.stop : Icons.play_arrow,
+                  size: 28,
+                  color: Colors.blueAccent,
+                ),
+                label: Text(
+                  scanning ? 'Stop Scan' : 'Start Scan',
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blueAccent,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade50,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 30,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    side: BorderSide(
+                      color: Colors.blueAccent.withOpacity(0.25),
+                      width: 1.2,
+                    ),
+                  ),
+                ),
+                onPressed: () async {
+                  await onRescan();
+                },
+              ),
+
+              const SizedBox(height: 10),
+
+              // Scan status text
+              Text(
+                scanning
+                    ? 'Scanning…'
+                    : lastScanTime == null
+                    ? 'No scans yet'
+                    : 'Last scan ${_formatTime()}',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
               ),
             ],
           ),

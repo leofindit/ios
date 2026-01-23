@@ -26,6 +26,7 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
     with SingleTickerProviderStateMixin {
   final Map<String, TrackerDevice> _devicesBySig = {};
 
+  int _scanSession = 0;
   bool scanning = false;
   int pageIndex = 0;
   DateTime? lastScanTime;
@@ -68,24 +69,63 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
       _devicesBySig.values.toList()
         ..sort((a, b) => a.firstSeenMs.compareTo(b.firstSeenMs));
 
+  // Toggle BLE scanning on/off
   Future<void> toggleScan() async {
     if (scanning) {
+      // invalidate any pending auto-stop task
+      _scanSession++;
+
       await BleBridge.stopScan();
       await _motionSub?.cancel();
       _motionSub = null;
 
+      if (!mounted) return;
       setState(() {
         scanning = false;
         lastScanTime = DateTime.now();
       });
-    } else {
-      await BleBridge.startScan();
+      return;
+    }
+
+    // starting a new session
+    final mySession = ++_scanSession;
+
+    // Auto-stop logic
+    unawaited(() async {
+      try {
+        await BleBridge.startScan(); // start immediately
+      } catch (_) {
+        if (!mounted || _scanSession != mySession) return;
+
+        await _motionSub?.cancel();
+        _motionSub = null;
+
+        setState(() {
+          scanning = false;
+          lastScanTime = DateTime.now();
+        });
+        return;
+      }
+
+      // mark scanning=true after startScan succeeds
+      if (!mounted || _scanSession != mySession) return;
+      setState(() => scanning = true);
       _startMotionDetection();
 
+      // Auto-stop after 5 min (but cancel-safe)
+      await Future.delayed(const Duration(minutes: 5));
+      if (!mounted || _scanSession != mySession) return;
+
+      await BleBridge.stopScan();
+      await _motionSub?.cancel();
+      _motionSub = null;
+
+      if (!mounted || _scanSession != mySession) return;
       setState(() {
-        scanning = true;
+        scanning = false;
+        lastScanTime = DateTime.now();
       });
-    }
+    }());
   }
 
   void _startMotionDetection() {
@@ -115,8 +155,8 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
 
   @override
   Widget build(BuildContext context) {
-    const double maxDistanceM = 50.0; // Advanced view
-    const double nearDistanceM = 15.0; // Main list
+    const double maxDistanceM = 20.0; // Advanced view
+    const double nearDistanceM = 5.0; // Main list
 
     // 1) Build an “advanced list” (<= 50m)
     // Keep UNKNOWN + APPLE_DEVICE so you don’t miss AirTag-ish packets on iOS.
@@ -135,7 +175,6 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
           ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
 
     // 2) Near list for the main Scan page (<= 15m)
-    // Here we can be stricter so the main page doesn’t look spammy.
     final nearDevices = advancedDevices
         .where((d) => d.distanceMeters <= nearDistanceM)
         .where(
@@ -147,11 +186,12 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
         )
         .toList();
 
-    // 3) Pages (ONLY declare this once)
+    // 3) Pages
     final pages = [
       DistancePage(
         nearDevices: nearDevices,
-        allTrackedDevices: advancedDevices, // 50m list in Show All Devices button
+        allTrackedDevices:
+            advancedDevices, // 50m list in Show All Devices button
         scanning: scanning,
         onRescan: toggleScan,
         lastScanTime: lastScanTime,
@@ -175,8 +215,8 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
                     borderRadius: BorderRadius.circular(6),
                     child: Image.asset(
                       'assets/leo_splash.png',
-                      height: 40,
-                      width: 40,
+                      height: 30,
+                      width: 30,
                       fit: BoxFit.cover,
                     ),
                   ),
