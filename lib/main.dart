@@ -40,6 +40,44 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
 
+  Timer? _scanCountdownTimer;
+  int _scanSecondsLeft = 0;
+
+  String get scanTimeLabel {
+    final m = (_scanSecondsLeft ~/ 60).toString();
+    final s = (_scanSecondsLeft % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _startScanCountdown() {
+    _scanSecondsLeft = 5 * 60;
+
+    _scanCountdownTimer?.cancel();
+    _scanCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+
+      if (!scanning) {
+        _scanCountdownTimer?.cancel();
+        _scanCountdownTimer = null;
+        _scanSecondsLeft = 0;
+        return;
+      }
+
+      if (_scanSecondsLeft > 0) {
+        setState(() => _scanSecondsLeft--);
+      } else {
+        _scanCountdownTimer?.cancel();
+        _scanCountdownTimer = null;
+      }
+    });
+  }
+
+  void _resetScanCountdown() {
+    _scanCountdownTimer?.cancel();
+    _scanCountdownTimer = null;
+    _scanSecondsLeft = 0;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +122,7 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
         scanning = false;
         lastScanTime = DateTime.now();
       });
+      _resetScanCountdown();
       return;
     }
 
@@ -104,6 +143,7 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
           scanning = false;
           lastScanTime = DateTime.now();
         });
+        _resetScanCountdown();
         return;
       }
 
@@ -111,6 +151,7 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
       if (!mounted || _scanSession != mySession) return;
       setState(() => scanning = true);
       _startMotionDetection();
+      _startScanCountdown();
 
       // Auto-stop after 5 min (but cancel-safe)
       await Future.delayed(const Duration(minutes: 5));
@@ -155,8 +196,8 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
 
   @override
   Widget build(BuildContext context) {
-    const double maxDistanceM = 20.0; // Advanced view
-    const double nearDistanceM = 5.0; // Main list
+    const double maxDistanceM = 6.096; // Advanced view // 20 ft
+    const double nearDistanceM = 1.524; // Main list // 5 ft
 
     // 1) Build an “advanced list” (<= 50m)
     // Keep UNKNOWN + APPLE_DEVICE so you don’t miss AirTag-ish packets on iOS.
@@ -177,13 +218,6 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
     // 2) Near list for the main Scan page (<= 15m)
     final nearDevices = advancedDevices
         .where((d) => d.distanceMeters <= nearDistanceM)
-        .where(
-          (d) =>
-              d.isLikelyTile ||
-              d.isLikelySamsung ||
-              d.isLikelyAirTag ||
-              d.kind == "APPLE_DEVICE",
-        )
         .toList();
 
     // 3) Pages
@@ -195,6 +229,7 @@ class _LeoTrackerAppState extends State<LeoTrackerApp>
         scanning: scanning,
         onRescan: toggleScan,
         lastScanTime: lastScanTime,
+        scanCountdownLabel: scanTimeLabel,
       ),
       IdentificationPage(devices: advancedDevices),
     ];

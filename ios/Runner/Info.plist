@@ -38,8 +38,6 @@
 	<string>LEOFindIt needs location access to detect nearby Bluetooth trackers.</string>
 	<key>Privacy - Accessory Tracking Usage Description</key>
 	<string>This helps comply with Apple's accessory tracking rules.</string>
-	<key>UIApplicationExitsOnSuspend</key>
-	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

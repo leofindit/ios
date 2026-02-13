@@ -31,6 +31,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     var rawFrame: String
     var kind: String
     var lastRssi: Int
+    var smoothedRssi: Int
   }
 
   private var states: [String: TrackerState] = [:]  // signature -> state
@@ -117,10 +118,9 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     let serviceUUIDs = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID]) ?? []
     let serviceUuidStrings = serviceUUIDs.map { $0.uuidString.uppercased() }
 
-    // Classify kind (may use localName + manufacturer data + UUIDs)
+    // Classify kind (best-effort)
     let kind = classifyKind(advertisementData: advertisementData)
-
-    // Build signature AFTER kind exists
+    // Create a signature that combines all stable identifiers
     let signature = "IOS_\(kind)_\(peripheral.identifier.uuidString)"
 
     // Optional debug
@@ -135,6 +135,11 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     let firstSeen = prev?.firstSeenMs ?? nowMs
     let sightings = (prev?.sightings ?? 0) + 1
 
+    // compute an exponential moving average for RSSI (more responsive)
+    let prevSmoothed = prev?.smoothedRssi ?? rssi
+    let newSmoothedDouble = (Double(prevSmoothed) * 0.4) + (Double(rssi) * 0.6)
+    let newSmoothed = Int(round(newSmoothedDouble))
+
     states[signature] = TrackerState(
       lastSeenMs: nowMs,
       firstSeenMs: firstSeen,
@@ -142,11 +147,20 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
       rotatingMacCount: 0,  // iOS cannot read device MAC
       rawFrame: rawFrame,
       kind: kind,
-      lastRssi: rssi
+      lastRssi: rssi,
+      smoothedRssi: newSmoothed
     )
 
     // distance estimate (meters)
-    let distanceMeters = estimateDistanceMeters(rssi: rssi)
+    let distanceMeters = estimateDistanceMeters(rssi: newSmoothed)
+
+    // Filter by kind
+    let allowedKinds: Set<String> = [
+      "AIRTAG", "TILE", "SAMSUNG_SMARTTAG", "SAMSUNG_DEVICE", "APPLE_DEVICE", "UNKNOWN",
+    ]
+    if !allowedKinds.contains(kind) {
+      return
+    }
 
     // prepare payload
     let payload: [String: Any] = [
@@ -156,6 +170,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
       "mac": "",  // iOS: not available
       "kind": kind,
       "rssi": rssi,
+      "smoothedRssi": newSmoothed,
       "distanceMeters": distanceMeters,
       "firstSeenMs": Int(firstSeen),
       "lastSeenMs": Int(nowMs),
@@ -196,11 +211,18 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     let localName =
       (advertisementData[CBAdvertisementDataLocalNameKey] as? String)?.lowercased() ?? ""
 
-    // 1) Strong name hints
+    // 1) Strong name hints (broaden tag name matching)
     if localName.contains("tile") {
       return "TILE"
     }
-    if localName.contains("smarttag") {
+    // match "smarttag", "smart tag", "smart-tag", "galaxy ... tag", or samsung + tag
+    if localName.contains("smarttag")
+      || localName.contains("smart tag")
+      || localName.contains("smart-tag")
+      || (localName.contains("samsung") && localName.contains("tag"))
+      || (localName.contains("galaxy") && localName.contains("tag"))
+      || (localName.contains("tag") && localName.contains("smart"))
+    {
       return "SAMSUNG_SMARTTAG"
     }
 

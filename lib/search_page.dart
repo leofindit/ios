@@ -143,7 +143,8 @@ class _SearchPageState extends State<SearchPage>
     // Smooth display distance (UI ONLY)
     final rawDist = d.distanceM;
     _displayDistanceM ??= rawDist;
-    _displayDistanceM = (_displayDistanceM! * 0.65) + (rawDist * 0.35);
+    // respond quicker to distance changes
+    _displayDistanceM = (_displayDistanceM! * 0.25) + (rawDist * 0.75);
 
     // FOUND logic
     if (_isFound(d)) {
@@ -330,7 +331,19 @@ class _SearchPageState extends State<SearchPage>
               ),
             ),
             const SizedBox(height: 12),
-            Text('MAC: ${d.displayMac}'),
+            // center stable IDs / signature / RSSI so detail page looks cleaner
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Text('ID: ${d.displayId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text('UUID: ${d.signature}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text('RSSI: ${d.rssi} dBm'),
+                ],
+              ),
+            ),
           ],
         ),
       ),

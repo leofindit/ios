@@ -62,7 +62,7 @@ class AirTagScanner(
         var lastRssi: Int,
         var lastSeenMs: Long,
         var rawFrame: String,
-        var lastMac: String?,
+        var lastId: String?,
         var rotatingMacCount: Int
     )
 
@@ -135,7 +135,7 @@ class AirTagScanner(
         }
 
         val signature = sha1(stableSource)
-        val mac = result.device?.address
+        val idOrMac = result.device?.address
         val rssi = result.rssi
         val rawHex = bytes.toHex()
 
@@ -145,13 +145,13 @@ class AirTagScanner(
                 lastRssi = rssi,
                 lastSeenMs = now,
                 rawFrame = rawHex,
-                lastMac = mac,
-                rotatingMacCount = if (mac.isNullOrBlank()) 0 else 1
+                lastId = idOrMac,
+                rotatingMacCount = if (idOrMac.isNullOrBlank()) 0 else 1
             )
         }
 
-        if (!mac.isNullOrBlank() && mac != state.lastMac) {
-            state.lastMac = mac
+            if (!idOrMac.isNullOrBlank() && idOrMac != state.lastId) {
+                state.lastId = idOrMac
             state.rotatingMacCount += 1
         }
 
@@ -164,7 +164,7 @@ class AirTagScanner(
                 id = "AIRTAG_$signature",
                 logicalId = "AIRTAG_$signature",
                 kind = TrackerKind.AIRTAG,
-                address = mac,
+                address = idOrMac,
                 rssi = rssi,
                 distanceMeters = estimateDistance(rssi),
                 lastSeenMs = now,

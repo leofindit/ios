@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 import 'search_page.dart';
 import 'advanced_scanner_view.dart';
+import 'device_marks.dart';
 
-class DistancePage extends StatelessWidget {
+class DistancePage extends StatefulWidget {
   final List<TrackerDevice> nearDevices; // <= 15m list
   final List<TrackerDevice> allTrackedDevices; // <= 50m list
   final bool scanning;
   final Future<void> Function() onRescan; // async callback
   final DateTime? lastScanTime;
+  final String scanCountdownLabel;
 
   const DistancePage({
     super.key,
@@ -19,14 +21,39 @@ class DistancePage extends StatelessWidget {
     required this.scanning,
     required this.onRescan,
     required this.lastScanTime,
+    required this.scanCountdownLabel,
   });
 
+  @override
+  State<DistancePage> createState() => _DistancePageState();
+}
+
+class _DistancePageState extends State<DistancePage> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen to device marks changes to rebuild cards
+    DeviceMarks.version.addListener(_onMarksChanged);
+  }
+
+  @override
+  void dispose() {
+    DeviceMarks.version.removeListener(_onMarksChanged);
+    super.dispose();
+  }
+
+  void _onMarksChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   String _formatTime() {
-    if (lastScanTime == null) return '';
-    int hour = lastScanTime!.hour % 12;
+    if (widget.lastScanTime == null) return '';
+    int hour = widget.lastScanTime!.hour % 12;
     if (hour == 0) hour = 12;
-    final min = lastScanTime!.minute.toString().padLeft(2, '0');
-    final am = lastScanTime!.hour >= 12 ? 'PM' : 'AM';
+    final min = widget.lastScanTime!.minute.toString().padLeft(2, '0');
+    final am = widget.lastScanTime!.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$min $am';
   }
 
@@ -40,7 +67,7 @@ class DistancePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final track = nearDevices;
+    final track = widget.nearDevices;
 
     return Column(
       children: [
@@ -92,9 +119,9 @@ class DistancePage extends StatelessWidget {
                           top: Radius.circular(18),
                         ),
                         child: AdvancedScannerView(
-                          devices: allTrackedDevices, // 50m list
-                          scanning: scanning,
-                          lastScanTime: lastScanTime,
+                          devices: widget.allTrackedDevices, // 50m list
+                          scanning: widget.scanning,
+                          lastScanTime: widget.lastScanTime,
                         ),
                       ),
                     ),
@@ -103,16 +130,16 @@ class DistancePage extends StatelessWidget {
               ),
 
               const SizedBox(height: 10),
-              
+
               // Start/Stop Scan
               ElevatedButton.icon(
                 icon: Icon(
-                  scanning ? Icons.stop : Icons.play_arrow,
+                  widget.scanning ? Icons.stop : Icons.play_arrow,
                   size: 28,
                   color: Colors.blueAccent,
                 ),
                 label: Text(
-                  scanning ? 'Stop Scan' : 'Start Scan',
+                  widget.scanning ? 'Stop Scan' : 'Start Scan',
                   style: const TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 19,
@@ -136,7 +163,7 @@ class DistancePage extends StatelessWidget {
                   ),
                 ),
                 onPressed: () async {
-                  await onRescan();
+                  await widget.onRescan();
                 },
               ),
 
@@ -144,9 +171,9 @@ class DistancePage extends StatelessWidget {
 
               // Scan status text
               Text(
-                scanning
-                    ? 'Scanning…'
-                    : lastScanTime == null
+                widget.scanning
+                    ? 'Scanning… ${widget.scanCountdownLabel}'
+                    : widget.lastScanTime == null
                     ? 'No scans yet'
                     : 'Last scan ${_formatTime()}',
                 style: TextStyle(
@@ -204,13 +231,63 @@ class DistancePage extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      d.displayName,
-                                      style: const TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 22,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            d.displayName,
+                                            style: const TextStyle(
+                                              fontFamily: 'Inter',
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 22,
+                                            ),
+                                          ),
+                                        ),
+                                        if (DeviceMarks.get(d.signature) ==
+                                            DeviceMark.friendly)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Friendly',
+                                              style: TextStyle(
+                                                fontFamily: 'Inter',
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.green.shade700,
+                                              ),
+                                            ),
+                                          )
+                                        else if (DeviceMarks.get(d.signature) ==
+                                            DeviceMark.unknown)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Unknown',
+                                              style: TextStyle(
+                                                fontFamily: 'Inter',
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.orange.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(

@@ -49,7 +49,7 @@ class NonAppleTrackerScanner(
     private var scanning = false
 
     private data class TrackerState(
-        var lastMac: String?,
+        var lastId: String?,
         var rotatingMacCount: Int,
         var lastSeenMs: Long
     )
@@ -122,19 +122,19 @@ class NonAppleTrackerScanner(
             identitySource.copyOfRange(0, minOf(STABLE_PREFIX_LEN, identitySource.size))
 
         val signature = sha1(stablePart)
-        val mac = result.device?.address
+        val idOrMac = result.device?.address
         val rssi = result.rssi
 
         val state = states.getOrPut(signature) {
             TrackerState(
-                lastMac = mac,
-                rotatingMacCount = if (mac.isNullOrBlank()) 0 else 1,
+                lastId = idOrMac,
+                rotatingMacCount = if (idOrMac.isNullOrBlank()) 0 else 1,
                 lastSeenMs = now
             )
         }
 
-        if (!mac.isNullOrBlank() && mac != state.lastMac) {
-            state.lastMac = mac
+        if (!idOrMac.isNullOrBlank() && idOrMac != state.lastId) {
+            state.lastId = idOrMac
             state.rotatingMacCount += 1
         }
 

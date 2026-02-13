@@ -113,7 +113,7 @@ class AdvancedScannerView extends StatelessWidget {
                                 Text(
                                   "Distance: ${distanceM.toStringAsFixed(2)} m • ${d.distanceFtLabel}",
                                 ),
-                                Text("MAC: ${d.displayMac}"),
+                                Text("ID: ${d.displayId}"),
                                 Text("Rotations: ${d.rotatingMacCount}"),
                               ],
                             ),

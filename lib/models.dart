@@ -1,10 +1,19 @@
+import 'dart:math';
+
 class TrackerDevice {
+  final String localName;
+  final bool isConnectable;
+  final List<String> serviceUuids;
+
   final String signature;
   final String id;
   final String kind;
 
-  final String? pinnedMac;
-  final String? lastMac;
+  final String? pinnedId;
+  final String? lastId;
+
+  // Deprecated: replaced by pinnedId/lastId which use system-provided UUIDs/signature
+  // kept for compatibility internally but not populated on iOS
 
   final int rssi;
   final double distanceMeters;
@@ -17,13 +26,16 @@ class TrackerDevice {
   final double smoothedRssi;
 
   static const double _mToFt = 3.28084;
+  // Distance estimation constants (match native)
+  static const double _txPower = -59.0;
+  static const double _pathLossN = 2.0;
 
   TrackerDevice({
     required this.signature,
     required this.id,
     required this.kind,
-    required this.pinnedMac,
-    required this.lastMac,
+    required this.pinnedId,
+    required this.lastId,
     required this.rssi,
     required this.distanceMeters,
     required this.firstSeenMs,
@@ -32,6 +44,9 @@ class TrackerDevice {
     required this.rotatingMacCount,
     required this.rawFrame,
     required this.smoothedRssi,
+    required this.localName,
+    required this.isConnectable,
+    required this.serviceUuids,
   });
 
   double get distanceM => distanceMeters;
@@ -52,11 +67,30 @@ class TrackerDevice {
 
   bool get isFound => distanceMeters <= 0.10;
 
+  bool get looksLikeNonTracker {
+    final n = localName.toLowerCase();
+    // Common non-tracker device names
+    if (n.contains('macbook') ||
+        n.contains('iphone') ||
+        n.contains('ipad') ||
+        n.contains('watch') ||
+        n.contains('airpods') ||
+        n.contains('imac') ||
+        n.contains('apple tv')) {
+      return true;
+    }
+    // Many normal devices are connectable; trackers often aren't.
+    // If it's connectable and we didn't classify it as a tracker, treat it as noise.
+    if (isConnectable && !isLikelyTile && !isLikelySamsung && !isLikelyAirTag) {
+      return true;
+    }
+    return false;
+  }
+
   String get displayName {
     if (isLikelyAirTag) return 'Apple AirTag';
     if (isLikelyTile) return 'Tile Tracker';
 
-    // Samsung
     if (kind == 'SAMSUNG_SMARTTAG' || kind == 'SAMSUNG') {
       return 'Samsung SmartTag';
     }
@@ -66,17 +100,26 @@ class TrackerDevice {
     return 'Unknown Tracker';
   }
 
-  String get displayMac => pinnedMac ?? lastMac ?? 'Random / Rotating';
+  // New API: display the stable device identifier (UUID/signature)
+  String get displayId => pinnedId ?? lastId ?? 'Random / Rotating';
+
+  // Backwards-compatible alias
+  String get displayMac => displayId;
 
   TrackerDevice merge(TrackerDevice newer) {
-    final smoothed = (smoothedRssi * 0.7) + (newer.rssi * 0.3);
+    // smoothing for RSSI to reduce UI jitter
+    final smoothed = (smoothedRssi * 0.4) + (newer.rssi * 0.6);
+    final distanceFromSmoothed = pow(
+      10.0,
+      (_txPower - smoothed) / (10.0 * _pathLossN),
+    ).toDouble();
 
     return TrackerDevice(
       signature: signature,
       id: id,
       kind: newer.kind.isNotEmpty ? newer.kind : kind,
-      pinnedMac: pinnedMac ?? newer.pinnedMac, // don’t pin rotating lastMac
-      lastMac: newer.lastMac,
+      pinnedId: pinnedId ?? newer.pinnedId,
+      lastId: newer.lastId,
       rssi: newer.rssi,
       distanceMeters: newer.distanceMeters,
       firstSeenMs: firstSeenMs,
@@ -85,6 +128,10 @@ class TrackerDevice {
       rotatingMacCount: newer.rotatingMacCount,
       rawFrame: newer.rawFrame,
       smoothedRssi: smoothed,
+
+      localName: newer.localName,
+      isConnectable: newer.isConnectable,
+      serviceUuids: newer.serviceUuids,
     );
   }
 
@@ -97,8 +144,8 @@ class TrackerDevice {
       signature: (m['signature'] as String?) ?? '',
       id: (m['id'] as String?) ?? '',
       kind: (m['kind'] as String?) ?? 'UNKNOWN',
-      pinnedMac: shouldPin ? mac : null,
-      lastMac: mac,
+      pinnedId: (m['pinnedId'] as String?) ?? (shouldPin ? mac : null),
+      lastId: (m['lastId'] as String?) ?? mac,
       rssi: (m['rssi'] as int?) ?? -100,
       distanceMeters: ((m['distanceMeters'] as num?) ?? 0).toDouble(),
       firstSeenMs: (m['firstSeenMs'] as int?) ?? (m['lastSeenMs'] as int?) ?? 0,
@@ -108,6 +155,10 @@ class TrackerDevice {
       rawFrame: (m['rawFrame'] as String?) ?? '',
       smoothedRssi: ((m['smoothedRssi'] as num?) ?? (m['rssi'] as num?) ?? -100)
           .toDouble(),
+
+      localName: (m['localName'] as String?) ?? '',
+      isConnectable: (m['isConnectable'] as bool?) ?? false,
+      serviceUuids: ((m['serviceUuids'] as List?) ?? []).cast<String>(),
     );
   }
 }

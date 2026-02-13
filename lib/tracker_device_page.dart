@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 
 class TrackerDevicePage extends StatelessWidget {
+  
   final TrackerDevice device;
 
   const TrackerDevicePage({super.key, required this.device});
@@ -19,10 +20,10 @@ class TrackerDevicePage extends StatelessWidget {
 
             _row('Type', device.displayName),
             _row('Kind', device.kind),
-            _row('MAC Address', device.displayMac),
+            _row('Device ID', device.displayId),
             _row('Distance', '${device.distance.toStringAsFixed(1)} m'),
             _row('RSSI (smoothed)', device.smoothedRssi.toStringAsFixed(1)),
-            _row('MAC rotations', device.rotatingMacCount.toString()),
+            _row('Rotations', device.rotatingMacCount.toString()),
 
             const SizedBox(height: 20),
             const Divider(),
