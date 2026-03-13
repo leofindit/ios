@@ -5,11 +5,14 @@ import 'models.dart';
 import 'device_marks.dart';
 import 'search_page.dart';
 
+// The IdentificationPage widget displays a list of detected tracker devices categorized as Friendly, Unknown, or Suspect
+// Designed to help users quickly identify and manage detected devices, providing clear categorization and easy access to device details
 class IdentificationPage extends StatelessWidget {
   final List<TrackerDevice> devices;
 
   const IdentificationPage({required this.devices, super.key});
 
+  // Build the UI for the IdentificationPage, categorizing detected devices into Friendly, Unknown, and Suspect sections
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
@@ -27,26 +30,30 @@ class IdentificationPage extends StatelessWidget {
 
           final mark = DeviceMarks.get(d.signature);
 
-          // If user marked it, keep it even if it's "stale"
-          if (mark == DeviceMark.friendly || mark == DeviceMark.unknown) {
+          if (mark == DeviceMark.friendly ||
+              mark == DeviceMark.unknown ||
+              mark == DeviceMark.suspect) {
             return true;
           }
 
-          // Otherwise only show recently seen devices
+          // If the device has been seen within the last 30 seconds, it is relevant for display even if it doesn't have a mark
           if (nowMs - d.lastSeenMs > 30 * 1000) return false;
-
           return true;
         }).toList();
 
         final friendly = <TrackerDevice>[];
         final unknown = <TrackerDevice>[];
+        final suspect = <TrackerDevice>[];
 
+        // For each qualified device, check its mark/status and categorize it accordingly
         for (final d in qualified) {
           final mark = DeviceMarks.get(d.signature);
           if (mark == DeviceMark.friendly) {
             friendly.add(d);
           } else if (mark == DeviceMark.unknown) {
             unknown.add(d);
+          } else if (mark == DeviceMark.suspect) {
+            suspect.add(d);
           }
         }
 
@@ -66,12 +73,21 @@ class IdentificationPage extends StatelessWidget {
               _emptyHint('No unknown devices yet')
             else
               ...unknown.map((d) => _tile(context, d)),
+
+            const SizedBox(height: 24),
+
+            _sectionTitle('Suspect'),
+            if (suspect.isEmpty)
+              _emptyHint('No suspect devices yet')
+            else
+              ...suspect.map((d) => _tile(context, d)),
           ],
         );
       },
     );
   }
 
+  // Helper widget to display section titles for the Friendly, Unknown, and Suspect categories
   Widget _sectionTitle(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -86,6 +102,7 @@ class IdentificationPage extends StatelessWidget {
     );
   }
 
+  // Helper widget to display a message when there are no devices in a specific category (Friendly, Unknown, or Suspect)
   Widget _emptyHint(String text) {
     return Padding(
       padding: const EdgeInsets.only(left: 8, bottom: 8),
@@ -101,9 +118,11 @@ class IdentificationPage extends StatelessWidget {
     );
   }
 
+  // Helper widget to build a ListTile for each detected device, displaying its name, last seen time, and estimated distance
   Widget _tile(BuildContext context, TrackerDevice d) {
     IconData icon;
 
+    // Determine the appropriate icon to display based on the device's display name
     if (d.displayName.contains('AirTag')) {
       icon = Icons.apple;
     } else if (d.displayName.contains('Tile')) {
@@ -118,9 +137,9 @@ class IdentificationPage extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => SearchPage(device: d)));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => SearchPage(device: d)),
+          );
         },
         leading: Icon(icon),
         title: Text(
@@ -141,6 +160,3 @@ class IdentificationPage extends StatelessWidget {
     );
   }
 }
-
-// Using google icons for icons here:
-// https://fonts.google.com/icons?selected=Material+Symbols+Outlined:stacks:FILL@0;wght@400;GRAD@0;opsz@24&icon.size=24&icon.color=%23e3e3e3

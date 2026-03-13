@@ -7,6 +7,8 @@ import 'device_marks.dart';
 import 'models.dart';
 import 'ble_bridge.dart';
 
+// The SearchPage widget provides a detailed view of a specific detected tracker device, allowing users to see real-time distance estimates, signal strength, and other relevant information
+// Also includes functionality for marking the device as Friendly, Unknown, or Suspect, helping users manage their detected devices effectively
 class SearchPage extends StatefulWidget {
   final TrackerDevice device;
 
@@ -16,38 +18,34 @@ class SearchPage extends StatefulWidget {
   State<SearchPage> createState() => _SearchPageState();
 }
 
+// Enum representing different proximity bands based on RSSI values, used to categorize the distance of detected devices and provide visual feedback to users about their proximity
 enum ProximityBand { immediate, nearby, close, far, unknown }
 
+// The _SearchPageState class manages the state of the SearchPage, including real-time updates of the detected device's information, handling user interactions for marking devices, and providing visual feedback based on the device's proximity and signal strength
 class _SearchPageState extends State<SearchPage>
     with SingleTickerProviderStateMixin {
   TrackerDevice? live;
   StreamSubscription<TrackerDevice>? sub;
 
-  // UI decoupling
   Timer? _uiTimer;
   TrackerDevice? _pending;
-  static const int _uiFrameMs = 60; // ~16 FPS
+  static const int _uiFrameMs = 60;
 
-  // FOUND logic (meters)
-  static const double _foundThresholdM = 0.10;
-  static const double _foundReleaseM = 0.35;
   static const int _foundHoldMs = 1800;
-  static const double _foundReleaseRssi = -62; // approx 0.35m away not found
+  static const double _foundReleaseRssi = -62;
 
   int? _foundAtMs;
   bool _hapticFired = false;
 
-  // Display distance meters internally
   double? _displayDistanceM;
 
-  // Direction smoothing (Apple-like)
-  double? _dirRssi; // smoothed RSSI for direction
+  double? _dirRssi;
   double _rssiVelocity = 0.0;
   int _lastDirChangeMs = 0;
 
   static const double _rssiEmaAlpha = 0.18;
   static const double _velocityAlpha = 0.25;
-  static const double _deadband = 0.25; // ignore tiny trend
+  static const double _deadband = 0.25;
   static const int _directionHoldMs = 400;
 
   String direction = 'Hold steady';
@@ -56,6 +54,7 @@ class _SearchPageState extends State<SearchPage>
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
 
+  // Initialize the state of the SearchPage, setting up the necessary subscriptions to receive real-time updates about the detected device, and configuring timers and animations to provide visual feedback based on the device's proximity and signal strength
   @override
   void initState() {
     super.initState();
@@ -85,11 +84,8 @@ class _SearchPageState extends State<SearchPage>
     });
   }
 
-  // Helpers
-
   bool _isFound(TrackerDevice d) {
-    // Consider found if within threshold
-    return d.smoothedRssi >= -55; // -50 stricter, -60 looser
+    return d.smoothedRssi >= -55;
   }
 
   String _feetLabel(double meters) {
@@ -97,6 +93,7 @@ class _SearchPageState extends State<SearchPage>
     return '${feet.toStringAsFixed(feet < 10 ? 1 : 0)} ft';
   }
 
+  // Helper function to determine the proximity band based on the RSSI value of the detected device
   ProximityBand _bandFromRssi(double rssi) {
     if (rssi >= -55) return ProximityBand.immediate;
     if (rssi >= -65) return ProximityBand.nearby;
@@ -105,6 +102,7 @@ class _SearchPageState extends State<SearchPage>
     return ProximityBand.unknown;
   }
 
+  // Helper widget to determine the appropriate color to display based on the proximity band of the detected device
   Color _bandColor(ProximityBand band) {
     switch (band) {
       case ProximityBand.immediate:
@@ -120,6 +118,7 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
+  // Helper widget to determine the appropriate label to display based on the proximity band of the detected device
   String _bandLabel(ProximityBand band) {
     switch (band) {
       case ProximityBand.immediate:
@@ -135,18 +134,14 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
-  // Core logic
-
+  // Helper function handles the logic for determining whether the device is considered found, updating the display distance, and providing feedback about whether the user is getting closer or moving away from the device
   void _updateState(TrackerDevice d) {
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // Smooth display distance (UI ONLY)
     final rawDist = d.distanceM;
     _displayDistanceM ??= rawDist;
-    // respond quicker to distance changes
     _displayDistanceM = (_displayDistanceM! * 0.25) + (rawDist * 0.75);
 
-    // FOUND logic
     if (_isFound(d)) {
       _foundAtMs ??= now;
 
@@ -180,7 +175,6 @@ class _SearchPageState extends State<SearchPage>
       _pulseCtrl.reset();
     }
 
-    // Direction logic (Apple-like smoothing)
     final rawRssi = d.rssi.toDouble();
     _dirRssi ??= rawRssi;
 
@@ -191,14 +185,12 @@ class _SearchPageState extends State<SearchPage>
     _rssiVelocity =
         (_rssiVelocity * (1 - _velocityAlpha)) + (delta * _velocityAlpha);
 
-    // Deadband: ignore tiny trend noise
     if (_rssiVelocity.abs() < _deadband) {
       direction = 'Hold steady';
       arrow = Icons.navigation;
       return;
     }
 
-    // Rate limit direction flips
     if (now - _lastDirChangeMs < _directionHoldMs) return;
 
     if (_rssiVelocity > 0) {
@@ -212,6 +204,7 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
+  // Clean up resources when the SearchPage is disposed, including canceling any active subscriptions to device updates, stopping timers, and disposing of animation controllers
   @override
   void dispose() {
     sub?.cancel();
@@ -220,11 +213,12 @@ class _SearchPageState extends State<SearchPage>
     super.dispose();
   }
 
+  // Build the UI for the SearchPage, displaying real-time information about the detected device, including its estimated distance, signal strength, and proximity band
+  // Also includes buttons for marking the device as Friendly, Unknown, or Suspect, allowing users to manage their detected devices effectively
   @override
   Widget build(BuildContext context) {
     final d = live ?? widget.device;
 
-    // Use smoothed RSSI for the proximity band so it doesn't flicker.
     final band = _bandFromRssi(d.smoothedRssi);
     final color = _bandColor(band);
 
@@ -262,7 +256,7 @@ class _SearchPageState extends State<SearchPage>
             ),
             const SizedBox(height: 8),
             Text(
-              _feetLabel(_displayDistanceM ?? d.distanceM),
+              '${(_displayDistanceM ?? d.distanceM).toStringAsFixed(2)} m • ${_feetLabel(_displayDistanceM ?? d.distanceM)}',
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
@@ -327,23 +321,30 @@ class _SearchPageState extends State<SearchPage>
                       },
                     ),
                   ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _MarkButton(
+                      label: 'Suspect',
+                      icon: Icons.warning_amber_rounded,
+                      selected: mark == DeviceMark.suspect,
+                      selectedColor: Colors.orange,
+                      onTap: () {
+                        setState(() {
+                          final current = DeviceMarks.get(d.signature);
+                          if (current == DeviceMark.suspect) {
+                            DeviceMarks.clear(d.signature);
+                          } else {
+                            DeviceMarks.set(d.signature, DeviceMark.suspect);
+                          }
+                        });
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            // center stable IDs / signature / RSSI so detail page looks cleaner
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Text('ID: ${d.displayId}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('UUID: ${d.signature}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('RSSI: ${d.rssi} dBm'),
-                ],
-              ),
-            ),
+            Text('UUID: ${d.displayUuid}'),
           ],
         ),
       ),
@@ -351,8 +352,8 @@ class _SearchPageState extends State<SearchPage>
   }
 }
 
-// MARK BUTTON
-
+// Custom widget for displaying a button to mark a device as Friendly, Unknown, or Suspect
+// The button changes its appearance based on whether it is selected or not, providing visual feedback to users about the current mark/status of the device
 class _MarkButton extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -360,6 +361,7 @@ class _MarkButton extends StatelessWidget {
   final Color selectedColor;
   final VoidCallback onTap;
 
+  // Constructor for the _MarkButton widget, requiring a label, icon, selected state, selected color, and onTap callback
   const _MarkButton({
     required this.label,
     required this.icon,
@@ -368,6 +370,7 @@ class _MarkButton extends StatelessWidget {
     required this.onTap,
   });
 
+  // Build the UI for the _MarkButton, displaying an icon and label with styling that changes based on whether the button is selected or not
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(

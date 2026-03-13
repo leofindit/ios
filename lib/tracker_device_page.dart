@@ -20,7 +20,7 @@ class TrackerDevicePage extends StatelessWidget {
 
             _row('Type', device.displayName),
             _row('Kind', device.kind),
-            _row('Device ID', device.displayId),
+            _row('Device ID', device.signature),
             _row('Distance', '${device.distance.toStringAsFixed(1)} m'),
             _row('RSSI (smoothed)', device.smoothedRssi.toStringAsFixed(1)),
             _row('Rotations', device.rotatingMacCount.toString()),
@@ -63,5 +63,5 @@ class TrackerDevicePage extends StatelessWidget {
   }
 }
 
-// Page used for saving state of unknow / friendly
+// Page used for saving state of unknown / friendly / suspect
 // Devices being marked on the distance page

@@ -1,33 +1,27 @@
 import 'package:flutter/foundation.dart';
 
-enum DeviceMark { unknown, friendly }
+// Enum representing the mark/status of a device
+enum DeviceMark { unknown, friendly, suspect }
 
+// Manage the marks/statuses of devices, allowing retrieval, setting, and clearing of marks
 class DeviceMarks {
   static final Map<String, DeviceMark> _marks = {};
-
-  // Notifier that triggers UI rebuilds
   static final ValueNotifier<int> version = ValueNotifier<int>(0);
 
+  // Retrieve the mark/status of a device by its signature
   static DeviceMark? get(String signature) {
     return _marks[signature];
   }
 
+  // Set the mark/status of a device by its signature
   static void set(String signature, DeviceMark mark) {
     _marks[signature] = mark;
-    version.value++; // notify listeners
+    version.value++;
   }
 
+  // Clear the mark/status of a device by its signature
   static void clear(String signature) {
     _marks.remove(signature);
-    version.value++; // notify listeners
+    version.value++;
   }
 }
-
-// Only Using this so the unknown / friendly logic
-// Can be saved across pages for the marks on
-// The search page to the Identification page
-
-// Issue that came up that I want to remember:
-// Never let a newly created page see more data than an earlier / older page
-// If an output wasn't valid on say the scan page it won't be valid
-// On another page

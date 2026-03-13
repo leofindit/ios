@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'models.dart';
 import 'search_page.dart';
+import 'device_marks.dart';
 
 class AdvancedScannerView extends StatelessWidget {
   final List<TrackerDevice> devices;
@@ -63,64 +64,74 @@ class AdvancedScannerView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: shown.isEmpty
-                  ? const Center(
-                      child: Text(
-                        "No devices detected yet.\nPress Start Scan to begin.",
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: shown.length,
-                      itemBuilder: (context, index) {
-                        final d = shown[index];
+              child: ValueListenableBuilder<int>(
+                valueListenable: DeviceMarks.version,
+                builder: (_, __, ___) {
+                  final shownUnmarked = shown
+                      .where((d) => DeviceMarks.get(d.signature) == null)
+                      .toList();
 
-                        final name = d.displayName;
-                        final id = d.id;
-                        final rssi = d.rssi;
-                        final distanceM = d.distanceM;
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                  return shownUnmarked.isEmpty
+                      ? const Center(
+                          child: Text(
+                            "No devices detected yet.\nPress Start Scan to begin.",
+                            textAlign: TextAlign.center,
                           ),
-                          child: ListTile(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => SearchPage(device: d),
-                                ),
-                              );
-                            },
-                            leading: Icon(
-                              _rssiIcon(rssi),
-                              color: _kindColor(d),
-                            ),
-                            title: Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _kindColor(d),
+                        )
+                      : ListView.builder(
+                          itemCount: shownUnmarked.length,
+                          itemBuilder: (context, index) {
+                            final d = shownUnmarked[index];
+                            final name = d.displayName;
+                            final id = d.id;
+                            final rssi = d.rssi;
+                            final distanceM = d.distanceM;
+
+                            return Card(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
                               ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text("ID: $id"),
-                                Text("RSSI: $rssi dBm • ${_rssiLabel(rssi)}"),
-                                Text(
-                                  "Distance: ${distanceM.toStringAsFixed(2)} m • ${d.distanceFtLabel}",
+                              child: ListTile(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SearchPage(device: d),
+                                    ),
+                                  );
+                                },
+                                leading: Icon(
+                                  _rssiIcon(rssi),
+                                  color: _kindColor(d),
                                 ),
-                                Text("ID: ${d.displayId}"),
-                                Text("Rotations: ${d.rotatingMacCount}"),
-                              ],
-                            ),
-                          ),
+                                title: Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _kindColor(d),
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("ID: $id"),
+                                    Text(
+                                      "RSSI: $rssi dBm • ${_rssiLabel(rssi)}",
+                                    ),
+                                    Text(
+                                      "Distance: ${distanceM.toStringAsFixed(2)} m • ${d.distanceFtLabel}",
+                                    ),
+                                    Text("UUID: ${d.displayUuid}"),
+                                    Text("Rotations: ${d.rotatingMacCount}"),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         );
-                      },
-                    ),
+                },
+              ),
             ),
           ],
         ),

@@ -1,19 +1,11 @@
-import 'dart:math';
-
+// Model for representing detected tracker devices and their properties
 class TrackerDevice {
-  final String localName;
-  final bool isConnectable;
-  final List<String> serviceUuids;
-
   final String signature;
   final String id;
   final String kind;
 
-  final String? pinnedId;
-  final String? lastId;
-
-  // Deprecated: replaced by pinnedId/lastId which use system-provided UUIDs/signature
-  // kept for compatibility internally but not populated on iOS
+  final String? pinnedMac;
+  final String? lastMac;
 
   final int rssi;
   final double distanceMeters;
@@ -25,17 +17,20 @@ class TrackerDevice {
 
   final double smoothedRssi;
 
-  static const double _mToFt = 3.28084;
-  // Distance estimation constants (match native)
-  static const double _txPower = -59.0;
-  static const double _pathLossN = 2.0;
+  final String localName;
+  final bool isConnectable;
+  final List<String> serviceUuids;
 
+  // Conversion factor from meters to feet for distance calculations
+  static const double _mToFt = 3.28084;
+
+  // Constructor for creating a TrackerDevice instance with all properties
   TrackerDevice({
     required this.signature,
     required this.id,
     required this.kind,
-    required this.pinnedId,
-    required this.lastId,
+    required this.pinnedMac,
+    required this.lastMac,
     required this.rssi,
     required this.distanceMeters,
     required this.firstSeenMs,
@@ -49,6 +44,7 @@ class TrackerDevice {
     required this.serviceUuids,
   });
 
+  // Getters for distance in different units
   double get distanceM => distanceMeters;
   double get distanceFt => distanceMeters * _mToFt;
 
@@ -57,19 +53,24 @@ class TrackerDevice {
 
   double get distance => distanceMeters;
 
+  // Convenience getters to determine if the device is likely an AirTag, Tile, or Samsung SmartTag
   bool get isLikelyAirTag => kind == 'AIRTAG';
   bool get isLikelyTile => kind == 'TILE';
-
+  
   bool get isLikelySamsung =>
       kind == 'SAMSUNG' ||
       kind == 'SAMSUNG_DEVICE' ||
       kind == 'SAMSUNG_SMARTTAG';
 
+  // A device is considered "found" if it's estimated to be within 10 centimeters, which is a common threshold for determining if a tracker is very close.
   bool get isFound => distanceMeters <= 0.10;
 
+  // Determine if a detected device is not a tracker
+  // Filter out common devices that may be detected but are not the target trackers
   bool get looksLikeNonTracker {
     final n = localName.toLowerCase();
-    // Common non-tracker device names
+
+    // Check for common device names that are unlikely to be trackers
     if (n.contains('macbook') ||
         n.contains('iphone') ||
         n.contains('ipad') ||
@@ -79,47 +80,52 @@ class TrackerDevice {
         n.contains('apple tv')) {
       return true;
     }
-    // Many normal devices are connectable; trackers often aren't.
-    // If it's connectable and we didn't classify it as a tracker, treat it as noise.
+
+    // If the device is connectable but does not have the characteristics of known trackers, it's likely not a tracker
     if (isConnectable && !isLikelyTile && !isLikelySamsung && !isLikelyAirTag) {
       return true;
     }
+
+    // If the device is rotating through many MAC addresses and doesn't match known tracker types, it's likely not a tracker
     return false;
   }
 
+  // A user-friendly display name for the device, based on its kind and characteristics
   String get displayName {
     if (isLikelyAirTag) return 'Apple AirTag';
     if (isLikelyTile) return 'Tile Tracker';
 
+    // Samsung devices can have different kinds, so we check for specific ones to provide a more accurate display name
     if (kind == 'SAMSUNG_SMARTTAG' || kind == 'SAMSUNG') {
       return 'Samsung SmartTag';
     }
     if (kind == 'SAMSUNG_DEVICE') return 'Samsung BLE Device';
 
+    // If the kind contains "APPLE" but isn't identified as an AirTag, label it as an Apple Find My Device, which include other types of Apple devices that support the Find My network
     if (kind.contains('APPLE')) return 'Apple Find My Device';
     return 'Unknown Tracker';
   }
 
-  // New API: display the stable device identifier (UUID/signature)
-  String get displayId => pinnedId ?? lastId ?? 'Random / Rotating';
+  // Helps users identify the device based on its MAC address when possible
+  // String get displayMac => pinnedMac ?? lastMac ?? 'Random / Rotating';
+  String get displayUuid {
+    if (signature.startsWith('IOS_')) {
+      return signature.replaceFirst('IOS_', '');
+    }
+    return signature;
+  }
 
-  // Backwards-compatible alias
-  String get displayMac => displayId;
-
+  // Merge the current TrackerDevice instance with a newer detection to allow the smoothing of values over time and maintaining a consistent representation of the device as it is detected multiple times
   TrackerDevice merge(TrackerDevice newer) {
-    // smoothing for RSSI to reduce UI jitter
     final smoothed = (smoothedRssi * 0.4) + (newer.rssi * 0.6);
-    final distanceFromSmoothed = pow(
-      10.0,
-      (_txPower - smoothed) / (10.0 * _pathLossN),
-    ).toDouble();
 
+    // When merging, keep the original signature, id, kind, and first seen time, but update properties that may change with each detection
     return TrackerDevice(
       signature: signature,
       id: id,
       kind: newer.kind.isNotEmpty ? newer.kind : kind,
-      pinnedId: pinnedId ?? newer.pinnedId,
-      lastId: newer.lastId,
+      pinnedMac: pinnedMac ?? newer.pinnedMac,
+      lastMac: newer.lastMac,
       rssi: newer.rssi,
       distanceMeters: newer.distanceMeters,
       firstSeenMs: firstSeenMs,
@@ -128,24 +134,25 @@ class TrackerDevice {
       rotatingMacCount: newer.rotatingMacCount,
       rawFrame: newer.rawFrame,
       smoothedRssi: smoothed,
-
       localName: newer.localName,
       isConnectable: newer.isConnectable,
       serviceUuids: newer.serviceUuids,
     );
   }
 
+  // Easy conversion of the raw data provided by the native code into a structured TrackerDevice instance that can be used within the Flutter app
   factory TrackerDevice.fromNative(Map<String, dynamic> m) {
     final mac = m['address'] as String?;
     final rotating = (m['rotatingMacCount'] as int?) ?? 0;
     final shouldPin = mac != null && rotating <= 1;
 
+    // Apply the same logic for determining the pinned MAC address as we do in the merge function, ensuring consistency in how to handle MAC addresses across detections
     return TrackerDevice(
       signature: (m['signature'] as String?) ?? '',
       id: (m['id'] as String?) ?? '',
       kind: (m['kind'] as String?) ?? 'UNKNOWN',
-      pinnedId: (m['pinnedId'] as String?) ?? (shouldPin ? mac : null),
-      lastId: (m['lastId'] as String?) ?? mac,
+      pinnedMac: shouldPin ? mac : null,
+      lastMac: mac,
       rssi: (m['rssi'] as int?) ?? -100,
       distanceMeters: ((m['distanceMeters'] as num?) ?? 0).toDouble(),
       firstSeenMs: (m['firstSeenMs'] as int?) ?? (m['lastSeenMs'] as int?) ?? 0,
@@ -155,7 +162,6 @@ class TrackerDevice {
       rawFrame: (m['rawFrame'] as String?) ?? '',
       smoothedRssi: ((m['smoothedRssi'] as num?) ?? (m['rssi'] as num?) ?? -100)
           .toDouble(),
-
       localName: (m['localName'] as String?) ?? '',
       isConnectable: (m['isConnectable'] as bool?) ?? false,
       serviceUuids: ((m['serviceUuids'] as List?) ?? []).cast<String>(),

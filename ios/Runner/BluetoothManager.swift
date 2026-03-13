@@ -6,66 +6,69 @@ import CoreBluetooth
 import Flutter
 import Foundation
 
+// Manage Bluetooth scanning and device classification on iOS using CoreBluetooth
 final class BluetoothManager: NSObject, CBCentralManagerDelegate {
+  // RSSI values at 1 meter for different device types, used for distance estimation
+  private let TX_POWER_TILE: Double = -59.0
+  private let TX_POWER_APPLE: Double = -61.0
+  private let TX_POWER_SAMSUNG: Double = -60.0
+  private let TX_POWER_UNKNOWN: Double = -62.0
 
-  // Contract constants
-  private let TX_POWER: Double = -59.0
-  private let PATH_LOSS_N: Double = 2.0  // indoor-ish
+  private let PATH_LOSS_N: Double = 2.2
   private let TRACKER_TTL_MS: Int64 = 30_000
 
   private let channel: FlutterMethodChannel
   private var central: CBCentralManager!
 
   private var scanning = false
-  // Request throttling
   private var pendingStart = false
   private var lastStartRequestMs: Int64 = 0
-  private let START_REQUEST_TTL_MS: Int64 = 10_000  // only honor for 10s
+  private let START_REQUEST_TTL_MS: Int64 = 10_000
 
-  // Minimal state so we can emit stable "signature" + TTL eviction
+  // State of a detected btle device including timing, signal strength, and classification
   private struct TrackerState {
     var lastSeenMs: Int64
     var firstSeenMs: Int64
     var sightings: Int
-    var rotatingMacCount: Int  // iOS can't read MAC -> stays 0
+    var rotatingMacCount: Int
     var rawFrame: String
     var kind: String
     var lastRssi: Int
     var smoothedRssi: Int
   }
 
-  private var states: [String: TrackerState] = [:]  // signature -> state
+  private var states: [String: TrackerState] = [:]
 
+  // Initialize BluetoothManager with a Flutter method channel and set up the CBCentralManager for Bluetooth scanning
   init(channel: FlutterMethodChannel) {
     self.channel = channel
     super.init()
     self.central = CBCentralManager(delegate: self, queue: nil)
   }
 
-  // Flutter -> iOS
+  // Start Bluetooth scanning if the central manager is powered on, otherwise sets a pending start flag to attempt scanning when the state updates
   func startScan() {
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-    // If already scanning, ignore
     if scanning { return }
 
-    // If not ready yet, remember intent and return
     guard central.state == .poweredOn else {
       pendingStart = true
       lastStartRequestMs = nowMs
       return
     }
 
-    // Ready -> start now
     pendingStart = false
     scanning = true
 
+    // Scan for all peripherals, allowing duplicates to receive continuous updates from devices
     central.scanForPeripherals(
       withServices: nil,
       options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
     )
   }
 
+  // Stop Bluetooth scanning if it is currently active, and reset the scanning state
   func stopScan() {
     pendingStart = false
     if !scanning { return }
@@ -73,104 +76,84 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     central.stopScan()
   }
 
-  // CBCentralManagerDelegate
+  // CBCentralManagerDelegate method called when the Bluetooth state updates.
+  // Checks if Bluetooth is powered on and either starts scanning or stops it based on the new state and any pending start requests
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     if central.state != .poweredOn {
-      // Bluetooth turned off/reset -> stop
       stopScan()
       return
     }
 
-    // If Bluetooth just became ready, and we recently asked to start, start now
+    // If pending start request and Bluetooth is powered on, check if the request is still valid based on the time it was made
     if pendingStart {
       let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
       if nowMs - lastStartRequestMs <= START_REQUEST_TTL_MS {
         pendingStart = false
         startScan()
       } else {
-        // stale request, ignore
         pendingStart = false
       }
     }
   }
 
+  // CBCentralManagerDelegate method called when a peripheral is discovered during scanning
+  // Process the advertisement data, classify the device, update its state, and send relevant info back to the Flutter layer
   func centralManager(
     _ central: CBCentralManager,
     didDiscover peripheral: CBPeripheral,
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-
-    // iOS uses 127 as invalid RSSI (not in range)
     let rssi = RSSI.intValue
     if rssi == 127 { return }
 
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-    // TTL eviction (prevents phantom buildup)
     states = states.filter { nowMs - $0.value.lastSeenMs <= TRACKER_TTL_MS }
 
-    // Extract data first (because we log it)
+    // Extract relevant info used for device classification and reporting
     let rawFrame = extractManufacturerHex(advertisementData: advertisementData)
-
     let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? false
     let localName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? ""
     let serviceUUIDs = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID]) ?? []
     let serviceUuidStrings = serviceUUIDs.map { $0.uuidString.uppercased() }
 
-    // Classify kind (best-effort)
     let kind = classifyKind(advertisementData: advertisementData)
-    // Create a signature that combines all stable identifiers
-    let signature = "IOS_\(kind)_\(peripheral.identifier.uuidString)"
 
-    // Optional debug
-    if localName.lowercased().contains("tag") || localName.lowercased().contains("air") {
-      print(
-        "BLE DEBUG name=\(localName) kind=\(kind) rssi=\(rssi) conn=\(isConnectable) services=\(serviceUuidStrings) mfg=\(rawFrame)"
-      )
-    }
+    // UUID-based identity on iOS
+    let signature = "IOS_\(peripheral.identifier.uuidString)"
 
-    // update state
+    // Update the state for the detected device
     let prev = states[signature]
     let firstSeen = prev?.firstSeenMs ?? nowMs
     let sightings = (prev?.sightings ?? 0) + 1
 
-    // compute an exponential moving average for RSSI (more responsive)
-    let prevSmoothed = prev?.smoothedRssi ?? rssi
-    let newSmoothedDouble = (Double(prevSmoothed) * 0.4) + (Double(rssi) * 0.6)
-    let newSmoothed = Int(round(newSmoothedDouble))
+    // Apply a simple smoothing algorithm to the RSSI values to reduce fluctuations and provide a more stable estimate of the signal strength
+    let priorSmooth = prev?.smoothedRssi ?? rssi
+    let smoothed = Int((Double(priorSmooth) * 0.4) + (Double(rssi) * 0.6))
+    let distanceMeters = estimateDistanceMeters(kind: kind, rssi: smoothed)
 
+    // Update the state dictionary with the new information for the detected device
     states[signature] = TrackerState(
       lastSeenMs: nowMs,
       firstSeenMs: firstSeen,
       sightings: sightings,
-      rotatingMacCount: 0,  // iOS cannot read device MAC
+      rotatingMacCount: 0,
       rawFrame: rawFrame,
       kind: kind,
       lastRssi: rssi,
-      smoothedRssi: newSmoothed
+      smoothedRssi: smoothed
     )
 
-    // distance estimate (meters)
-    let distanceMeters = estimateDistanceMeters(rssi: newSmoothed)
-
-    // Filter by kind
-    let allowedKinds: Set<String> = [
-      "AIRTAG", "TILE", "SAMSUNG_SMARTTAG", "SAMSUNG_DEVICE", "APPLE_DEVICE", "UNKNOWN",
-    ]
-    if !allowedKinds.contains(kind) {
-      return
-    }
-
-    // prepare payload
+    // Prepare the payload to be sent to the Flutter layer
     let payload: [String: Any] = [
       "id": "\(kind)_\(signature)",
       "logicalId": "\(kind)_\(signature)",
-      "address": NSNull(),  // iOS: not available
-      "mac": "",  // iOS: not available
+      "address": NSNull(),
+      "mac": "",
       "kind": kind,
       "rssi": rssi,
-      "smoothedRssi": newSmoothed,
+      "smoothedRssi": smoothed,
       "distanceMeters": distanceMeters,
       "firstSeenMs": Int(firstSeen),
       "lastSeenMs": Int(nowMs),
@@ -183,84 +166,85 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
       "serviceUuids": serviceUuidStrings,
     ]
 
-    if kind == "UNKNOWN" {
-      print(
-        "BLE UNKNOWN name=\(localName) rssi=\(rssi) conn=\(isConnectable) services=\(serviceUuidStrings) mfg=\(rawFrame)"
-      )
-    }
-
-    if kind == "SAMSUNG_DEVICE" || kind == "SAMSUNG_SMARTTAG" || kind == "TILE" || kind == "AIRTAG"
-      || kind == "APPLE_DEVICE"
+    // Log the detected device information
+    if kind == "UNKNOWN" || kind == "APPLE_DEVICE" || kind == "TILE" || kind == "SAMSUNG_DEVICE"
+      || kind == "SAMSUNG_SMARTTAG" || kind == "AIRTAG"
     {
       print(
-        "BLE kind=\(kind) name=\(localName) rssi=\(rssi) conn=\(isConnectable) services=\(serviceUuidStrings) mfg=\(rawFrame)"
+        "BLE kind=\(kind) name=\(localName) rssi=\(rssi) smooth=\(smoothed) conn=\(isConnectable) services=\(serviceUuidStrings) mfg=\(rawFrame)"
       )
     }
 
     channel.invokeMethod("onDevice", arguments: payload)
   }
 
-  // Helpers
-  private func estimateDistanceMeters(rssi: Int) -> Double {
-    // 10 ^ ((txPower - rssi) / (10*n))
-    let ratio = (TX_POWER - Double(rssi)) / (10.0 * PATH_LOSS_N)
-    return pow(10.0, ratio)
+  // Estimate the distance to a Bluetooth device based on its RSSI value and classification
+  private func estimateDistanceMeters(kind: String, rssi: Int) -> Double {
+    let txPower: Double
+    switch kind {
+    case "TILE":
+      txPower = TX_POWER_TILE
+    case "AIRTAG", "APPLE_DEVICE":
+      txPower = TX_POWER_APPLE
+    case "SAMSUNG_DEVICE", "SAMSUNG_SMARTTAG":
+      txPower = TX_POWER_SAMSUNG
+    default:
+      txPower = TX_POWER_UNKNOWN
+    }
+
+    // Distance estimation: distance = 10 ^ ((txPower - rssi) / (10 * n))
+    // Provides an estimate of the distance in meters
+    let ratio = (txPower - Double(rssi)) / (10.0 * PATH_LOSS_N)
+    let meters = pow(10.0, ratio)
+    return max(0.05, meters)
   }
 
+  // Classify the type of Bluetooth device based on its advertisement data
   private func classifyKind(advertisementData: [String: Any]) -> String {
     let localName =
       (advertisementData[CBAdvertisementDataLocalNameKey] as? String)?.lowercased() ?? ""
 
-    // 1) Strong name hints (broaden tag name matching)
     if localName.contains("tile") {
       return "TILE"
     }
-    // match "smarttag", "smart tag", "smart-tag", "galaxy ... tag", or samsung + tag
-    if localName.contains("smarttag")
-      || localName.contains("smart tag")
-      || localName.contains("smart-tag")
-      || (localName.contains("samsung") && localName.contains("tag"))
-      || (localName.contains("galaxy") && localName.contains("tag"))
-      || (localName.contains("tag") && localName.contains("smart"))
-    {
+    if localName.contains("smarttag") {
       return "SAMSUNG_SMARTTAG"
     }
 
-    // 2) Manufacturer data company id (best when present)
+    // Check manufacturer data for known company identifiers to classify devices
     if let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data, mfg.count >= 2
     {
       let b0 = UInt16(mfg[mfg.startIndex])
       let b1 = UInt16(mfg[mfg.startIndex + 1])
       let companyId = b0 | (b1 << 8)
 
+      // Check for known company identifiers to classify devices
       if companyId == 0x0131 { return "TILE" }
-
-      // Samsung company ID = Samsung device, NOT necessarily SmartTag
       if companyId == 0x0075 { return "SAMSUNG_DEVICE" }
-
-      // Apple is noisy
       if companyId == 0x004C { return "APPLE_DEVICE" }
     }
 
-    // 3) Service UUID heuristic (sometimes present)
+    // Check service UUIDs for known patterns that indicate specific device types
     if let uuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
       let s = uuids.map { $0.uuidString.uppercased() }
 
-      // Find My heuristic (not always visible)
+      // Check for known service UUIDs that indicate specific device types.
       if s.contains(where: { $0.contains("FD44") }) {
         return "AIRTAG"
       }
 
-      // Tile can also show up on these UUIDs in some models (best-effort)
+      // Some Tile devices use service UUIDs that contain "FEED" or "FEE7", so check for those patterns to classify them as Tile devices.
       if s.contains(where: { $0.contains("FEED") || $0.contains("FEE7") }) {
         return "TILE"
       }
     }
 
-    // If it's named "samsung" but not "smarttag", treat as generic samsung device
+    // Check the local name for known patterns that indicate specific device types
     if localName.contains("samsung") {
       return "SAMSUNG_DEVICE"
     }
+
+    // If the device is not connectable and has no local name but includes service UUIDs, it may be an Apple device that is broadcasting without a local name, so classify it as an Apple device in that case
     let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? false
     if localName.isEmpty && !isConnectable {
       if let uuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
@@ -272,6 +256,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     return "UNKNOWN"
   }
 
+  // Extract the manufacturer data from the advertisement data and convert it to a hexadecimal string representation
   private func extractManufacturerHex(advertisementData: [String: Any]) -> String {
     guard let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data else {
       return ""

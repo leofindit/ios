@@ -6,14 +6,17 @@ import 'search_page.dart';
 import 'advanced_scanner_view.dart';
 import 'device_marks.dart';
 
-class DistancePage extends StatefulWidget {
-  final List<TrackerDevice> nearDevices; // <= 15m list
-  final List<TrackerDevice> allTrackedDevices; // <= 50m list
+// The DistancePage widget displays a list of nearby tracker devices with their estimated distances and RSSI values
+// Also provides buttons to show all detected devices and to start or stop scanning for devices
+class DistancePage extends StatelessWidget {
+  final List<TrackerDevice> nearDevices;
+  final List<TrackerDevice> allTrackedDevices;
   final bool scanning;
-  final Future<void> Function() onRescan; // async callback
+  final Future<void> Function() onRescan;
   final DateTime? lastScanTime;
   final String scanCountdownLabel;
 
+  // Constructor for the DistancePage widget to allow the page to display relevant information about detected devices and provide functionality for managing scans
   const DistancePage({
     super.key,
     required this.nearDevices,
@@ -24,39 +27,17 @@ class DistancePage extends StatefulWidget {
     required this.scanCountdownLabel,
   });
 
-  @override
-  State<DistancePage> createState() => _DistancePageState();
-}
-
-class _DistancePageState extends State<DistancePage> {
-  @override
-  void initState() {
-    super.initState();
-    // Listen to device marks changes to rebuild cards
-    DeviceMarks.version.addListener(_onMarksChanged);
-  }
-
-  @override
-  void dispose() {
-    DeviceMarks.version.removeListener(_onMarksChanged);
-    super.dispose();
-  }
-
-  void _onMarksChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
+  // Format the last scan time into a user-friendly string, displaying the time in a 12-hour format with AM/PM
   String _formatTime() {
-    if (widget.lastScanTime == null) return '';
-    int hour = widget.lastScanTime!.hour % 12;
+    if (lastScanTime == null) return '';
+    int hour = lastScanTime!.hour % 12;
     if (hour == 0) hour = 12;
-    final min = widget.lastScanTime!.minute.toString().padLeft(2, '0');
-    final am = widget.lastScanTime!.hour >= 12 ? 'PM' : 'AM';
+    final min = lastScanTime!.minute.toString().padLeft(2, '0');
+    final am = lastScanTime!.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$min $am';
   }
 
+  // Helper function to determine the number of signal bars to display based on the RSSI value
   int _bars(int rssi) {
     if (rssi >= -55) return 5;
     if (rssi >= -65) return 4;
@@ -65,18 +46,18 @@ class _DistancePageState extends State<DistancePage> {
     return 1;
   }
 
+  // Build the UI for the DistancePage, including buttons for showing all devices and starting/stopping scans, as well as a list of nearby devices with their details
   @override
   Widget build(BuildContext context) {
-    final track = widget.nearDevices;
+    final track = nearDevices;
 
+    // If there are no nearby devices detected, the page will display a message indicating that no trackers have been detected
     return Column(
       children: [
-        // HEADER AREA
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
           child: Column(
             children: [
-              // Show All Devices button
               OutlinedButton.icon(
                 icon: const Icon(
                   Icons.search,
@@ -119,27 +100,24 @@ class _DistancePageState extends State<DistancePage> {
                           top: Radius.circular(18),
                         ),
                         child: AdvancedScannerView(
-                          devices: widget.allTrackedDevices, // 50m list
-                          scanning: widget.scanning,
-                          lastScanTime: widget.lastScanTime,
+                          devices: allTrackedDevices,
+                          scanning: scanning,
+                          lastScanTime: lastScanTime,
                         ),
                       ),
                     ),
                   );
                 },
               ),
-
               const SizedBox(height: 10),
-
-              // Start/Stop Scan
               ElevatedButton.icon(
                 icon: Icon(
-                  widget.scanning ? Icons.stop : Icons.play_arrow,
+                  scanning ? Icons.stop : Icons.play_arrow,
                   size: 28,
                   color: Colors.blueAccent,
                 ),
                 label: Text(
-                  widget.scanning ? 'Stop Scan' : 'Start Scan',
+                  scanning ? 'Stop Scan' : 'Start Scan',
                   style: const TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 19,
@@ -163,17 +141,14 @@ class _DistancePageState extends State<DistancePage> {
                   ),
                 ),
                 onPressed: () async {
-                  await widget.onRescan();
+                  await onRescan();
                 },
               ),
-
               const SizedBox(height: 10),
-
-              // Scan status text
               Text(
-                widget.scanning
-                    ? 'Scanning… ${widget.scanCountdownLabel}'
-                    : widget.lastScanTime == null
+                scanning
+                    ? 'Scanning… $scanCountdownLabel'
+                    : lastScanTime == null
                     ? 'No scans yet'
                     : 'Last scan ${_formatTime()}',
                 style: TextStyle(
@@ -185,140 +160,134 @@ class _DistancePageState extends State<DistancePage> {
             ],
           ),
         ),
-
-        // MAIN LIST (devices <= 15m)
         Expanded(
-          child: track.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No trackers detected',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: track.length,
-                  itemBuilder: (_, i) {
-                    final d = track[i];
+          child: ValueListenableBuilder<int>(
+            valueListenable: DeviceMarks.version,
+            builder: (_, __, ___) {
+              final visibleTrack = track
+                  .where((d) => DeviceMarks.get(d.signature) == null)
+                  .toList();
 
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SearchPage(device: d),
+              return visibleTrack.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No trackers detected',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey,
                         ),
                       ),
-                      child: Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 13,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.signal_cellular_alt_rounded,
-                                size: 46,
-                                color: Colors.blueAccent,
+                    )
+                  : ListView.builder(
+                      itemCount: visibleTrack.length,
+                      itemBuilder: (_, i) {
+                        final d = visibleTrack[i];
+                        final mark = DeviceMarks.get(d.signature);
+                        final isMarked = mark != null;
+
+                        return GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SearchPage(device: d),
+                            ),
+                          ),
+                          child: Opacity(
+                            opacity: isMarked ? 0.45 : 1.0,
+                            child: Card(
+                              color: isMarked ? Colors.grey.shade200 : null,
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 13,
                               ),
-                              const SizedBox(width: 20),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Row(
                                   children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
+                                    Icon(
+                                      Icons.signal_cellular_alt_rounded,
+                                      size: 46,
+                                      color: isMarked
+                                          ? Colors.grey
+                                          : Colors.blueAccent,
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
                                             d.displayName,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontFamily: 'Inter',
                                               fontWeight: FontWeight.bold,
                                               fontSize: 22,
+                                              color: isMarked
+                                                  ? Colors.grey
+                                                  : Colors.black,
                                             ),
                                           ),
-                                        ),
-                                        if (DeviceMarks.get(d.signature) ==
-                                            DeviceMark.friendly)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Distance: ${d.distanceM.toStringAsFixed(2)} m • ${d.distanceFtLabel}',
+                                            style: TextStyle(
+                                              color: isMarked
+                                                  ? Colors.grey
+                                                  : Colors.black,
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.green.shade100,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
+                                          ),
+                                          Text(
+                                            'RSSI: ${d.rssi} dBm',
+                                            style: TextStyle(
+                                              color: isMarked
+                                                  ? Colors.grey
+                                                  : Colors.black,
                                             ),
-                                            child: Text(
-                                              'Friendly',
-                                              style: TextStyle(
-                                                fontFamily: 'Inter',
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.green.shade700,
-                                              ),
+                                          ),
+                                          Text(
+                                            'UUID: ${d.displayUuid}',
+                                            style: TextStyle(
+                                              color: isMarked
+                                                  ? Colors.grey
+                                                  : Colors.black,
                                             ),
-                                          )
-                                        else if (DeviceMarks.get(d.signature) ==
-                                            DeviceMark.unknown)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.orange.shade100,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              'Unknown',
-                                              style: TextStyle(
-                                                fontFamily: 'Inter',
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.orange.shade700,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: List.generate(
+                                              5,
+                                              (idx) => Icon(
+                                                Icons.signal_cellular_alt,
+                                                size: 20,
+                                                color:
+                                                    idx <
+                                                        _bars(
+                                                          d.smoothedRssi
+                                                              .round(),
+                                                        )
+                                                    ? (isMarked
+                                                          ? Colors.grey
+                                                          : Colors.green)
+                                                    : Colors.grey.shade300,
                                               ),
                                             ),
                                           ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Distance: ${d.distanceFt.toStringAsFixed(1)} ft',
-                                    ),
-                                    Text('RSSI: ${d.rssi} dBm'),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: List.generate(
-                                        5,
-                                        (idx) => Icon(
-                                          Icons.signal_cellular_alt,
-                                          size: 20,
-                                          color:
-                                              idx <
-                                                  _bars(d.smoothedRssi.round())
-                                              ? Colors.green
-                                              : Colors.grey.shade300,
-                                        ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
-                  },
-                ),
+            },
+          ),
         ),
       ],
     );
