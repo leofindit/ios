@@ -66,3 +66,9 @@ Open ios/Runner.xcworkspace
 1. Open Runner.xcworkspace
 2. Select device or simulator
 3. Press Run
+
+## Documentation
+
+[User Testing Documentation.pdf](https://github.com/user-attachments/files/26132139/User.Testing.Documentation.pdf)<br>
+[Developer Documentation.pdf](https://github.com/user-attachments/files/26132141/Developer.Documentation.pdf)<br>
+[LeoFindIt Code Documentation.pdf](https://github.com/user-attachments/files/26132470/LeoFindIt.Code.Documentation.pdf)
