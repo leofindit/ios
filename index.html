@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEOFindIt - Support & Privacy</title>
+    <style>
+        :root {
+            --primary-blue: #0996D1;
+            --dark-blue: #2084E8;
+            --text-dark: #333333;
+            --text-light: #666666;
+            --bg-light: #f8f9fa;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+        }
+        header {
+            text-align: center;
+            padding: 40px 0 20px 0;
+            border-bottom: 2px solid var(--bg-light);
+        }
+        h1 {
+            color: var(--primary-blue);
+            margin-bottom: 5px;
+        }
+        h2 {
+            color: var(--dark-blue);
+            margin-top: 40px;
+            border-bottom: 1px solid var(--bg-light);
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: var(--text-dark);
+            margin-top: 25px;
+        }
+        p {
+            color: var(--text-light);
+        }
+        .faq-container {
+            background-color: var(--bg-light);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        .faq-item {
+            margin-bottom: 20px;
+        }
+        .faq-item:last-child {
+            margin-bottom: 0;
+        }
+        .faq-question {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .privacy-box {
+            border: 1px solid #e0e0e0;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 2px solid var(--bg-light);
+            color: var(--text-light);
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>LEOFindIt</h1>
+        <p>Privacy-First BLE Tracker Detection</p>
+    </header>
+
+    <section id="support">
+        <h2>App Support & FAQ</h2>
+        <p>Welcome to the LEOFindIt support page. Our app is designed to help you actively scan your environment for hidden Bluetooth Low Energy (BLE) tracking devices without compromising your own privacy.</p>
+
+        <div class="faq-container">
+            <div class="faq-item">
+                <div class="faq-question">How do I report a bug or provide feedback?</div>
+                <p>The fastest way to reach our development team is directly through the app. Open the hamburger menu on the left side of the screen, tap <strong>Report</strong>, and submit your feedback securely and anonymously.</p>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">What does a 3 dBm change in RSSI mean?</div>
+                <p>Because RSSI operates on a logarithmic scale, a change of 3 dBm roughly translates to either doubling or halving your physical distance to the tracker. Keep an eye on the signal bars and the RSSI numbers as you move.</p>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Which Mission Profile should I use?</div>
+                <p>Use the <strong>Passive</strong> profile when you are checking a general area or leaving your phone stationary to see if a tracker is present over time. Use the <strong>Active</strong> profile when you are conducting a targeted, close-quarters search (like inspecting a vehicle or a backpack) where the signal cutoff needs to be stricter.</p>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Need direct assistance?</div>
+                <p>If you cannot use the in-app reporting tool, you can email our support team at: <a href="mailto:support@yourdomain.com">support@yourdomain.com</a> <em>(Note: Update this email address before deploying)</em>.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="privacy">
+        <h2>Privacy Policy</h2>
+        <div class="privacy-box">
+            <p><strong>Effective Date:</strong> March 27, 2026</p>
+            
+            <h3>1. Introduction</h3>
+            <p>This Privacy Policy explains how LEOFindIt ("we," "our," or "the App") handles information. LEOFindIt is designed to be a privacy-first utility for detecting Bluetooth Low Energy (BLE) tracking devices. We believe in complete data minimization: we do not track you, we do not require an account, and we do not collect your personal information.</p>
+
+            <h3>2. Data Collection and Usage</h3>
+            <p>LEOFindIt functions entirely on your local device.</p>
+            <ul>
+                <li><strong>No Personal Information (PII):</strong> We do not collect, transmit, or store your name, email address, phone number, or device identifiers.</li>
+                <li><strong>No Location Tracking:</strong> The App does not request, access, or store your GPS location data.</li>
+                <li><strong>Bluetooth Scanning:</strong> The App uses your device's native Bluetooth hardware to scan for nearby public BLE signals. This data is processed strictly on your device to estimate proximity. We do not transmit this scanning data to any external servers.</li>
+            </ul>
+
+            <h3>3. Local Data Storage</h3>
+            <p>Any device classifications (e.g., marking a signal as "Friendly" or "Suspect"), custom device names, and generated case reports are saved securely and exclusively to your device's local storage. You maintain total control over this data and can delete it at any time by clearing the App's storage or deleting the App.</p>
+
+            <h3>4. Anonymous Feedback</h3>
+            <p>LEOFindIt includes an optional feature allowing you to submit plain-text feedback or bug reports to the development team.</p>
+            <ul>
+                <li>If you choose to use this feature, the App sends only the text you type, your App version, and a local timestamp.</li>
+                <li>This payload is routed through a secure ingestion webhook.</li>
+                <li>It does not include your IP address, device ID, or any mechanism to link the feedback back to you.</li>
+            </ul>
+
+            <h3>5. Third-Party Services</h3>
+            <p>We do not use third-party analytics SDKs or advertising networks. The App relies solely on Apple's native CoreBluetooth framework.</p>
+
+            <h3>6. Contact Us</h3>
+            <p>If you have questions about this Privacy Policy, please contact us at: <a href="mailto:support@yourdomain.com">support@yourdomain.com</a>.</p>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2026 LEOFindIt Development Team. All rights reserved.</p>
+    </footer>
+
+</body>
+</html>
