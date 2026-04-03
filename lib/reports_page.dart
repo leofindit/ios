@@ -57,7 +57,7 @@ class _ReportsPageState extends State<ReportsPage> {
               const SizedBox(height: 12),
               const Text(
                 'Use this form to send plain-text feedback or a situational report to the development team. '
-                'Please do not include any Personally Identifiable Information (PII) such as names, phone numbers, or emails.',
+                'Please do not include any Personally Identifiable Information such as names, phone numbers, or emails.',
                 style: TextStyle(
                   color: Colors.blueGrey,
                   fontSize: 14,

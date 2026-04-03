@@ -3,26 +3,32 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+
 import 'device_marks.dart';
 import 'models.dart';
 import 'ble_bridge.dart';
 import 'reports_store.dart';
+import 'app_tutorial.dart';
 
-// The SearchPage widget provides a detailed view of a specific detected tracker device, allowing users to see real-time distance estimates, signal strength, and other relevant information
-// Also includes functionality for marking the device as Friendly, Unknown, or Suspect, helping users manage their detected devices effectively
+// a detailed view of a specific detected tracker device, allowing users to see real-time distance estimates, signal strength, and other relevant information
+// Also includes marking the device as Friendly, Unknown, or Suspect
 class SearchPage extends StatefulWidget {
   final TrackerDevice device;
-
-  const SearchPage({required this.device, super.key});
-
+  final bool tutorialMode;
+  const SearchPage({
+    required this.device,
+    this.tutorialMode = false,
+    super.key,
+  });
   @override
   State<SearchPage> createState() => _SearchPageState();
 }
 
-// Enum representing different proximity bands based on RSSI values, used to categorize the distance of detected devices and provide visual feedback to users about their proximity
+// Enum representing different proximity bands based on RSSI values
 enum ProximityBand { immediate, nearby, close, far, unknown }
 
-// The _SearchPageState class manages the state of the SearchPage, including real-time updates of the detected device's information, handling user interactions for marking devices, and providing visual feedback based on the device's proximity and signal strength
+// _SearchPageState class manages real-time updates of the detected device's information, handling user interactions for marking devices, and providing visual feedback based on the device's proximity and signal strength
 class _SearchPageState extends State<SearchPage>
     with SingleTickerProviderStateMixin {
   TrackerDevice? live;
@@ -32,13 +38,14 @@ class _SearchPageState extends State<SearchPage>
   TrackerDevice? _pending;
   static const int _uiFrameMs = 60;
 
+  static const double _foundThresholdFt = 0.33;
+  static const double _foundReleaseFt = 1.15;
   static const int _foundHoldMs = 1800;
-  static const double _foundReleaseRssi = -62;
 
   int? _foundAtMs;
   bool _hapticFired = false;
 
-  double? _displayDistanceM;
+  double? _displayDistanceFt;
 
   double? _dirRssi;
   double _rssiVelocity = 0.0;
@@ -55,111 +62,129 @@ class _SearchPageState extends State<SearchPage>
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
 
-  void _showRenameDialog(BuildContext context, TrackerDevice d) {
-    final customName = DeviceMarks.getName(d.signature) ?? '';
-    final ctrl = TextEditingController(text: customName);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename Device'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx), // Changed from onTap
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Changed from onTap
-              DeviceMarks.setName(d.signature, ctrl.text);
-              Navigator.pop(ctx);
-              setState(() {});
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
+  Timer? _ageTick;
+  int _nowMs = DateTime.now().millisecondsSinceEpoch;
 
-  /*
-  void _showFeedbackDialog(BuildContext context, TrackerDevice d) {
-    final ctrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Submit Feedback'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Describe where it was found, or app issues (No PII)',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx), // Changed from onTap
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // Changed from onTap
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Sending feedback...')),
-              );
-              ReportsStore.sendAnonymousFeedback(ctrl.text);
-            },
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
-    );
-  }
-  */
+  final GlobalKey _distanceInfoKey = GlobalKey();
+  final GlobalKey _signalStrengthKey = GlobalKey();
+  final GlobalKey _categoryTabsKey = GlobalKey();
 
-  // Initialize the state of the SearchPage, setting up the necessary subscriptions to receive real-time updates about the detected device, and configuring timers and animations to provide visual feedback based on the device's proximity and signal strength
+  bool _isManuallyFound = false;
+  DateTime? _timeFound;
+
   @override
   void initState() {
     super.initState();
     live = widget.device;
 
+    if (DeviceMarks.getMark(widget.device.signature) == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (DeviceMarks.getMark(widget.device.signature) == null) {
+          DeviceMarks.setMark(
+            widget.device.signature,
+            DeviceMark.nonsuspect,
+          ); // Default state
+        }
+      });
+    }
+
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-
     _pulseAnim = Tween<double>(
       begin: 1.0,
       end: 1.06,
     ).chain(CurveTween(curve: Curves.easeInOut)).animate(_pulseCtrl);
 
-    sub = BleBridge.detections.listen((d) {
-      if (d.signature != widget.device.signature) return;
-      _pending = d;
-    });
-
-    _uiTimer = Timer.periodic(const Duration(milliseconds: _uiFrameMs), (_) {
-      if (!mounted || _pending == null) return;
-      setState(() {
-        _updateState(_pending!);
-        live = _pending;
+    if (!widget.tutorialMode) {
+      sub = BleBridge.detections.listen((d) {
+        if (d.signature != widget.device.signature) return;
+        _pending = d;
       });
+
+      _uiTimer = Timer.periodic(const Duration(milliseconds: _uiFrameMs), (_) {
+        if (!mounted || _pending == null) return;
+        setState(() {
+          _updateState(_pending!);
+          live = _pending;
+        });
+      });
+    } else {
+      _displayDistanceFt = widget.device.distanceFeet;
+      _updateState(widget.device);
+    }
+
+    _ageTick = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      setState(() => _nowMs = DateTime.now().millisecondsSinceEpoch);
     });
+
+    if (widget.tutorialMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 900));
+        if (!mounted) return;
+        await _runTutorial();
+      });
+    }
   }
 
-  bool _isFound(TrackerDevice d) {
-    return d.smoothedRssi >= -55;
+  Future<bool> _showCoach(List<TargetFocus> targets) async {
+    if (!mounted || targets.isEmpty) return false;
+    final completer = Completer<bool>();
+    final coach = TutorialCoachMark(
+      targets: targets,
+      colorShadow: Colors.black,
+      opacityShadow: 0.78,
+      paddingFocus: 10,
+      hideSkip: true,
+      onFinish: () {
+        if (!completer.isCompleted) completer.complete(true);
+      },
+      onSkip: () {
+        if (!completer.isCompleted) completer.complete(false);
+        return true;
+      },
+    );
+    await Future.delayed(const Duration(milliseconds: 100));
+    coach.show(context: context);
+    return completer.future;
   }
 
-  String _feetLabel(double meters) {
-    final feet = meters * 3.28084;
-    return '${feet.toStringAsFixed(feet < 10 ? 1 : 0)} ft';
+  Future<void> _runTutorial() async {
+    await _showCoach([
+      tutorialTarget(
+        key: _distanceInfoKey,
+        id: 'search_distance',
+        title: 'Distance and signal',
+        body: 'Tracker distance and signal strengths are displayed here.',
+      ),
+      tutorialTarget(
+        key: _signalStrengthKey,
+        id: 'search_signal_colors',
+        title: 'Signal strength colors',
+        body:
+            'Grey, yellow, and green show strength from weakest to strongest.',
+      ),
+      tutorialTarget(
+        key: _categoryTabsKey,
+        id: 'search_categories',
+        title: 'Tracker categories',
+        body:
+            'You can put a tracker in three categories: Friendly, Nonsuspect, and Suspect. If you use Suspect, it will create a report.',
+        align: ContentAlign.top,
+      ),
+    ]);
+    if (mounted) Navigator.pop(context);
+  }
+
+  String _ageLabel(int lastSeenMs) {
+    final s = ((_nowMs - lastSeenMs) / 1000).clamp(0, 999999).toDouble();
+    if (s < 60) return "${s.toStringAsFixed(1)}s ago";
+    final m = (s / 60).floor();
+    final rs = (s - m * 60).floor();
+    return "${m}m ${rs}s ago";
   }
 
   // Helper function to determine the proximity band based on the RSSI value of the detected device
@@ -206,43 +231,10 @@ class _SearchPageState extends State<SearchPage>
   // Helper function handles the logic for determining whether the device is considered found, updating the display distance, and providing feedback about whether the user is getting closer or moving away from the device
   void _updateState(TrackerDevice d) {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final rawDist = d.distanceFeet;
 
-    final rawDist = d.distance;
-    _displayDistanceM ??= rawDist;
-    _displayDistanceM = (_displayDistanceM! * 0.25) + (rawDist * 0.75);
-
-    if (_isFound(d)) {
-      _foundAtMs ??= now;
-
-      if (!_hapticFired) {
-        HapticFeedback.lightImpact();
-        _hapticFired = true;
-      }
-
-      if (!_pulseCtrl.isAnimating) {
-        _pulseCtrl.repeat(reverse: true);
-      }
-
-      direction = 'FOUND';
-      arrow = Icons.check_rounded;
-      return;
-    }
-
-    if (_foundAtMs != null) {
-      final held = now - _foundAtMs! < _foundHoldMs;
-      final stillClose = d.smoothedRssi >= _foundReleaseRssi;
-
-      if (held || stillClose) {
-        direction = 'FOUND';
-        arrow = Icons.check_rounded;
-        return;
-      }
-
-      _foundAtMs = null;
-      _hapticFired = false;
-      _pulseCtrl.stop();
-      _pulseCtrl.reset();
-    }
+    _displayDistanceFt ??= rawDist;
+    _displayDistanceFt = (_displayDistanceFt! * 0.90) + (rawDist * 0.10);
 
     final rawRssi = d.rssi.toDouble();
     _dirRssi ??= rawRssi;
@@ -273,186 +265,220 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
-  // Clean up resources when the SearchPage is disposed, including canceling any active subscriptions to device updates, stopping timers, and disposing of animation controllers
-  @override
-  void dispose() {
-    sub?.cancel();
-    _uiTimer?.cancel();
-    _pulseCtrl.dispose();
-    super.dispose();
+  void _markFound(TrackerDevice d) async {
+    await BleBridge.stopScan();
+    setState(() {
+      _isManuallyFound = true;
+      _timeFound = DateTime.now();
+    });
   }
 
-  // Build the UI for the SearchPage, displaying real-time information about the detected device, including its estimated distance, signal strength, and proximity band
-  // Also includes buttons for marking the device as Friendly, Unknown, or Suspect, allowing users to manage their detected devices effectively
-  @override
-  Widget build(BuildContext context) {
-    final d = live ?? widget.device;
+  void _submitReport(TrackerDevice d) {
+    final ctrl = TextEditingController();
+    bool isSubmitting = false;
 
-    final band = _bandFromRssi(d.smoothedRssi);
-    final color = _bandColor(band);
-
-    final mark = DeviceMarks.getMark(d.signature);
-    final customName = DeviceMarks.getName(d.signature) ?? '';
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(d.displayName, overflow: TextOverflow.ellipsis),
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Submit Case Report'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'UUID: ${d.displayUuid}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text('Found: ${_timeFound?.toString().split('.')[0] ?? ""}'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Describe circumstances (No PII)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              onPressed: () => _showRenameDialog(context, d),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      setState(() => isSubmitting = true);
+                      final payload =
+                          "UUID: ${d.displayUuid}\nFound: ${_timeFound?.toString().split('.')[0]}\n\n${ctrl.text}";
+                      await ReportsStore.sendAnonymousFeedback(payload);
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Report securely submitted.'),
+                          ),
+                        );
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Send Report'),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // Helper function to display a dialog for submitting anonymous feedback
+  @override
+  void dispose() {
+    sub?.cancel();
+    _uiTimer?.cancel();
+    _ageTick?.cancel();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  // Build the UI for the SearchPage,
+  // Also includes buttons for marking the device as Friendly, Unknown, or Suspect
+  @override
+  Widget build(BuildContext context) {
+    final d = live ?? widget.device;
+    final band = _bandFromRssi(d.smoothedRssi);
+    final color = _bandColor(band);
+    final mark = DeviceMarks.getMark(d.signature) ?? DeviceMark.nonsuspect;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(d.displayName, overflow: TextOverflow.ellipsis),
+      ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ScaleTransition(
-              scale: _foundAtMs != null
-                  ? _pulseAnim
-                  : const AlwaysStoppedAnimation(1.0),
-              child: Container(
-                width: 170,
-                height: 170,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _foundAtMs != null ? color : null,
-                  gradient: _foundAtMs != null
-                      ? null
-                      : const LinearGradient(
-                          colors: [Color(0xFF0996D1), Color(0xFF2084E8)],
-                        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (!_isManuallyFound) ...[
+                Container(
+                  width: 170,
+                  height: 170,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF0996D1), Color(0xFF2084E8)],
+                    ),
+                  ),
+                  child: Icon(arrow, size: 90, color: Colors.white),
                 ),
-                child: Icon(arrow, size: 90, color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: 22),
-            Text(
-              direction,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${(_displayDistanceM ?? d.distance).toStringAsFixed(2)} m • ${_feetLabel(_displayDistanceM ?? d.distance)}',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: color, width: 1.5),
-              ),
-              child: Text(
-                _bandLabel(band),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+                const SizedBox(height: 22),
+                Text(
+                  direction,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 1. Classification Dropdown
-                  const Text(
-                    'Classify Device',
+                const SizedBox(height: 8),
+                Column(
+                  key: _distanceInfoKey,
+                  children: [
+                    Text(
+                      '${(_displayDistanceFt ?? d.distanceFeet).toStringAsFixed(2)} ft',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "RSSI: ${d.rssi} dBm • Seen ${_ageLabel(d.lastSeenMs)}",
+                      style: const TextStyle(fontFamily: 'Inter'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  key: _signalStrengthKey,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: color, width: 1.5),
+                  ),
+                  child: Text(
+                    _bandLabel(band),
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
+                      fontFamily: 'Inter',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: color,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<DeviceMark?>(
-                    value: mark,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('Unmarked')),
-                      DropdownMenuItem(
-                        value: DeviceMark.suspect,
-                        child: Text(
-                          'Suspect',
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: DeviceMark.friendly,
-                        child: Text(
-                          'Friendly',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: DeviceMark.nonsuspect,
-                        child: Text(
-                          'Nonsuspect',
-                          style: TextStyle(
-                            color: Colors.blueGrey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        if (val == null) {
-                          DeviceMarks.clear(d.signature);
-                        } else {
-                          DeviceMarks.setMark(d.signature, val);
-                        }
-                      });
-                    },
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.check_circle),
+                  label: const Text('Mark as Found'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
                   ),
-
-                  const SizedBox(height: 16),
-                  
-                  /* Anonymous Feedback Button
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.feedback_outlined),
-                    label: const Text('Send Anonymous Feedback'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () => _showFeedbackDialog(context, d),
+                  onPressed: () => _markFound(d),
+                ),
+              ] else ...[
+                const Text(
+                  'DEVICE FOUND',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
                   ),
-                  const SizedBox(height: 16),
-                  */
-
-                ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'UUID: ${d.displayUuid}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('Date/Time: ${_timeFound.toString().split('.')[0]}'),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.report),
+                  label: const Text('Create Report'),
+                  onPressed: () => _submitReport(d),
+                ),
+              ],
+              const SizedBox(height: 18),
+              Padding(
+                key: _categoryTabsKey,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: _MarkTabs(
+                  selected: mark,
+                  onSelect: (m) {
+                    setState(() => DeviceMarks.setMark(d.signature, m));
+                    if (m == DeviceMark.suspect && !widget.tutorialMode)
+                      ReportsStore.createFromDevice(d);
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text('UUID: ${d.displayUuid}'),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                'UUID: ${d.displayUuid}',
+                style: const TextStyle(fontFamily: 'Inter'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -460,58 +486,112 @@ class _SearchPageState extends State<SearchPage>
 }
 
 // Custom widget for displaying a button to mark a device as Friendly, Unknown, or Suspect
-// The button changes its appearance based on whether it is selected or not, providing visual feedback to users about the current mark/status of the device
-class _MarkButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final Color selectedColor;
-  final VoidCallback onTap;
+class _MarkTabs extends StatelessWidget {
+  final DeviceMark selected;
+  final ValueChanged<DeviceMark> onSelect;
 
-  // Constructor for the _MarkButton widget, requiring a label, icon, selected state, selected color, and onTap callback
-  const _MarkButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.selectedColor,
-    required this.onTap,
-  });
+  const _MarkTabs({required this.selected, required this.onSelect});
+
+  static const Color _friendly = Color(0xFF2E7D32);
+  static const Color _suspect = Color(0xFFD9534F);
+  static const Color _nonsuspect = Color(0xFF1500FF);
 
   // Build the UI for the _MarkButton, displaying an icon and label with styling that changes based on whether the button is selected or not
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      height: 46,
+    final bg = Colors.grey.shade100;
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: selected
-            ? selectedColor.withOpacity(0.12)
-            : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(14),
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.grey.shade300, width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _Pill(
+              label: 'Suspect',
+              color: _suspect,
+              selected: selected == DeviceMark.suspect,
+              onTap: () => onSelect(DeviceMark.suspect),
+            ),
+          ),
+          Expanded(
+            child: _Pill(
+              label: 'Friendly',
+              color: _friendly,
+              selected: selected == DeviceMark.friendly,
+              onTap: () => onSelect(DeviceMark.friendly),
+            ),
+          ),
+          Expanded(
+            child: _Pill(
+              label: 'Nonsuspect',
+              color: _nonsuspect,
+              selected: selected == DeviceMark.nonsuspect,
+              onTap: () => onSelect(DeviceMark.nonsuspect),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _Pill({
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: selected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: selected ? selectedColor : Colors.grey.shade300,
-          width: 1.2,
+          color: selected ? Colors.grey.shade300 : Colors.transparent,
+          width: 1,
         ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                  color: Colors.black.withOpacity(0.06),
+                ),
+              ]
+            : null,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(999),
         onTap: onTap,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 20,
-              color: selected ? selectedColor : Colors.grey.shade600,
-            ),
+            Icon(Icons.signal_cellular_alt_rounded, size: 18, color: color),
             const SizedBox(width: 8),
             Text(
               label,
+              textAlign: TextAlign.center,
               style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                 fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: selected ? selectedColor : Colors.grey.shade700,
+                color: selected ? Colors.black : Colors.grey.shade700,
+                letterSpacing: 0.2,
               ),
             ),
           ],

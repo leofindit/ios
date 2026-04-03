@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http; // Add this import
+import 'package:http/http.dart' as http;
 
 import 'device_marks.dart';
 import 'models.dart';
@@ -12,23 +12,18 @@ import 'models.dart';
 class TrackerReport {
   final String reportId;
   final DateTime createdAt;
-
   final String signature;
   final String id;
   final String kind;
   final String mac;
-
   final int rssi;
   final double distanceFeet;
   final int firstSeenMs;
   final int lastSeenMs;
   final int rotatingMacCount;
-
   final String rawFrame;
-
   final String? exportedUriJson;
   final String? exportedUriTxt;
-
   final String? teamFeedback;
 
   TrackerReport({
@@ -116,8 +111,6 @@ class ReportsStore {
   static const MethodChannel _storage = MethodChannel("leo_find_it/storage");
   static final ValueNotifier<List<TrackerReport>> notifier =
       ValueNotifier<List<TrackerReport>>([]);
-
-  // REPLACE THIS with your actual Formspree URL
   static const String _formspreeUrl = "https://formspree.io/f/mykbzaoe";
 
   static Future<void> sendAnonymousFeedback(String feedbackText) async {
@@ -155,10 +148,8 @@ class ReportsStore {
     try {
       final f = await _reportsFile();
       if (!await f.exists()) return;
-
       final txt = await f.readAsString();
       if (txt.trim().isEmpty) return;
-
       final decoded = jsonDecode(txt);
       if (decoded is! List) return;
 
@@ -206,10 +197,9 @@ class ReportsStore {
       mac: d.displayUuid,
       rssi: d.rssi,
       distanceFeet: d.distanceFeet,
-      //distanceMeters: d.distanceMeters,
       firstSeenMs: d.firstSeenMs,
       lastSeenMs: d.lastSeenMs,
-      rotatingMacCount: d.rotatingMacCount,
+      rotatingMacCount: 0,
       rawFrame: d.rawFrame,
     );
 
@@ -219,57 +209,22 @@ class ReportsStore {
   }
 
   static Future<void> updateFeedback(String reportId, String feedback) async {
-    // update local state
     final updated = notifier.value.map((r) {
       if (r.reportId != reportId) return r;
       return r.copyWith(teamFeedback: feedback);
     }).toList();
-
     notifier.value = updated;
     await _persist();
-
-    // send feedback to backend
     _transmitFeedback(feedback);
   }
 
   static Future<void> _transmitFeedback(String feedbackText) async {
-    if (feedbackText.trim().isEmpty) return;
-
-    try {
-      final uri = Uri.parse(_formspreeUrl);
-
-      // payload that includes feedback and timestamp
-      // Formspree automatically maps these JSON keys to the email body.
-      final payload = {
-        "Feedback": feedbackText,
-        "Timestamp (UTC)": DateTime.now().toUtc().toIso8601String(),
-        "App Version": "1.1.0+1",
-      };
-
-      final response = await http.post(
-        uri,
-        headers: {
-          "Accept": "application/json", // Required by Formspree for API calls
-          "Content-Type": "application/json",
-        },
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        debugPrint("Feedback transmitted to Formspree successfully.");
-      } else {
-        debugPrint("Formspree error. Status: ${response.statusCode}");
-      }
-    } catch (e) {
-      debugPrint("Error transmitting feedback: $e");
-    }
+    sendAnonymousFeedback(feedbackText);
   }
 
   static String _safeTimestamp(DateTime t) {
     return t.toIso8601String().replaceAll(":", "-").replaceAll(".", "-");
   }
-
-  // static String _feet(double meters) => (meters * 3.28084).toStringAsFixed(1);
 
   static String _dtLocalString(DateTime dt) {
     final y = dt.year.toString().padLeft(4, '0');
@@ -283,7 +238,6 @@ class ReportsStore {
 
   static String _formatCaseTxt(TrackerReport r) {
     final created = _dtLocalString(r.createdAt.toLocal());
-
     final firstSeen = r.firstSeenMs > 0
         ? _dtLocalString(
             DateTime.fromMillisecondsSinceEpoch(r.firstSeenMs).toLocal(),
@@ -299,7 +253,7 @@ class ReportsStore {
     final markLabel = switch (mark) {
       DeviceMark.suspect => "Suspect",
       DeviceMark.friendly => "Friendly",
-      DeviceMark.nonsuspect => "Non-Suspect",
+      DeviceMark.nonsuspect => "Nonsuspect",
       null => "Unmarked",
     };
 
@@ -326,13 +280,12 @@ RSSI: ${r.rssi} dBm
 Distance estimate: ${r.distanceFeet.toStringAsFixed(1)} ft
 First seen: $firstSeen
 Last seen:  $lastSeen
-MAC rotations observed: ${r.rotatingMacCount}
 
 User Classification
 -------------------
 Marked as: $markLabel
 
-User Notes (no PII)
+User Notes (no personal info)
 -------------------
 $notesBlock
 
@@ -353,7 +306,6 @@ Disclaimer
     final content = _formatCaseTxt(r);
 
     String uri = "";
-
     try {
       uri =
           await _storage.invokeMethod<String>("saveToDownloads", {
@@ -375,10 +327,8 @@ Disclaimer
       if (x.reportId != r.reportId) return x;
       return x.copyWith(exportedUriTxt: uri);
     }).toList();
-
     notifier.value = updated;
     await _persist();
-
     return uri;
   }
 
@@ -388,7 +338,6 @@ Disclaimer
     final jsonPretty = const JsonEncoder.withIndent("  ").convert(r.toJson());
 
     String uri = "";
-
     try {
       uri =
           await _storage.invokeMethod<String>("saveToDownloads", {
@@ -410,10 +359,8 @@ Disclaimer
       if (x.reportId != r.reportId) return x;
       return x.copyWith(exportedUriJson: uri);
     }).toList();
-
     notifier.value = updated;
     await _persist();
-
     return uri;
   }
 
@@ -442,7 +389,6 @@ Disclaimer
         uriJson,
         uriTxt,
       ].whereType<String>().where((u) => u.isNotEmpty);
-
       for (final u in uris) {
         try {
           if (u.startsWith('/')) {

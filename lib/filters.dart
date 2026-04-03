@@ -54,8 +54,8 @@ class FiltersModel {
   static final ValueNotifier<FiltersState> notifier =
       ValueNotifier<FiltersState>(
         const FiltersState(
-          maxAdvancedDistanceFt: 100.0, // 100 ft
-          maxMainDistanceFt: 15.0, // 15 ft
+          maxAdvancedDistanceFt: 20.0, // 20 ft
+          maxMainDistanceFt: 5.0, // 5 ft
           minRssi: -95,
           // hideConnectableNonTrackers: true,
           filterByRssi: false,

@@ -5,157 +5,291 @@ import 'models.dart';
 import 'device_marks.dart';
 import 'search_page.dart';
 
-// The IdentificationPage widget displays a list of detected tracker devices categorized as Friendly, Unknown, or Suspect
-// Designed to help users quickly identify and manage detected devices, providing clear categorization and easy access to device details
+// displays a list of detected tracker devices categorized as Friendly, Unknown, or Suspect
 class IdentificationPage extends StatelessWidget {
   final List<TrackerDevice> devices;
+  final GlobalKey? identifyTabsKey;
 
-  const IdentificationPage({required this.devices, super.key});
+  const IdentificationPage({
+    required this.devices,
+    this.identifyTabsKey,
+    super.key,
+  });
 
-  // Build the UI for the IdentificationPage, categorizing detected devices into Friendly, Unknown, and Suspect sections
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: DeviceMarks.version,
       builder: (_, __, ___) {
+        // De-dupe by signature (latest snapshot wins)
         final Map<String, TrackerDevice> unique = {};
         for (final d in devices) {
           unique[d.signature] = d;
         }
 
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-
         final qualified = unique.values.where((d) {
           if (d.distance <= 0) return false;
-
-          final mark = DeviceMarks.getMark(d.signature);
-
-          if (mark == DeviceMark.suspect ||
-              mark == DeviceMark.friendly ||
-              mark == DeviceMark.nonsuspect) {
-            return true;
-          }
-
-          // If the device has been seen within the last 30 seconds, it is relevant for display even if it doesn't have a mark
           if (nowMs - d.lastSeenMs > 30 * 1000) return false;
           return true;
         }).toList();
 
-        // Change lists to reflect new categories
         final suspect = <TrackerDevice>[];
         final friendly = <TrackerDevice>[];
         final nonsuspect = <TrackerDevice>[];
 
         for (final d in qualified) {
-          final mark = DeviceMarks.getMark(d.signature);
-          if (mark == DeviceMark.suspect) {
-            suspect.add(d);
-          } else if (mark == DeviceMark.friendly) {
+          final mark =
+              DeviceMarks.getMark(d.signature) ?? DeviceMark.nonsuspect;
+          if (mark == DeviceMark.friendly) {
             friendly.add(d);
-          } else if (mark == DeviceMark.nonsuspect) {
-            // Replaced 'unknown'
+          } else if (mark == DeviceMark.suspect) {
+            suspect.add(d);
+          } else {
             nonsuspect.add(d);
           }
         }
 
-        // Update the ListView children order
-        return ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            _sectionTitle('Suspect'),
-            if (suspect.isEmpty)
-              _emptyHint('No suspect devices yet')
-            else
-              ...suspect.map((d) => _tile(context, d)),
-            const SizedBox(height: 24),
-
-            _sectionTitle('Friendly'),
-            if (friendly.isEmpty)
-              _emptyHint('No friendly devices yet')
-            else
-              ...friendly.map((d) => _tile(context, d)),
-            const SizedBox(height: 24),
-
-            _sectionTitle('Nonsuspect'),
-            if (nonsuspect.isEmpty)
-              _emptyHint('No nonsuspect devices yet')
-            else
-              ...nonsuspect.map((d) => _tile(context, d)),
-          ],
+        return DefaultTabController(
+          length: 3,
+          child: Column(
+            children: [
+              Padding(
+                key: identifyTabsKey,
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                child: const _MarkTabs(),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _list(context, suspect, empty: 'No suspect trackers yet'),
+                    _list(context, friendly, empty: 'No friendly trackers yet'),
+                    _list(
+                      context,
+                      nonsuspect,
+                      empty: 'No nonsuspect trackers yet',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  // Helper widget to display section titles for the Friendly, Unknown, and Suspect categories
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontFamily: 'Montserrat',
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
+  Widget _list(
+    BuildContext context,
+    List<TrackerDevice> list, {
+    required String empty,
+  }) {
+    return Column(
+      children: [
+        if (list.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear All Classifications'),
+              onPressed: () {
+                for (var d in list) {
+                  DeviceMarks.clear(d.signature);
+                }
+              },
+            ),
+          ),
+        Expanded(
+          child: list.isEmpty
+              ? Center(
+                  child: Text(
+                    empty,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _deviceCard(context, list[i]),
+                ),
         ),
-      ),
+      ],
     );
   }
 
-  // Helper widget to display a message when there are no devices in a specific category (Friendly, Unknown, or Suspect)
-  Widget _emptyHint(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'Montserrat',
-          fontSize: 13,
-          color: Colors.grey[600],
-          fontStyle: FontStyle.italic,
-        ),
-      ),
-    );
+  int _bars(int rssi) {
+    if (rssi >= -55) return 5;
+    if (rssi >= -65) return 4;
+    if (rssi >= -75) return 3;
+    if (rssi >= -85) return 2;
+    return 1;
   }
 
-  // Helper widget to build a ListTile for each detected device, displaying its name, last seen time, and estimated distance
-  Widget _tile(BuildContext context, TrackerDevice d) {
-    IconData icon;
+  String _ageLabel(int lastSeenMs) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final s = ((now - lastSeenMs) / 1000).clamp(0, 999999).toDouble();
+    if (s < 60) return "${s.toStringAsFixed(1)}s ago";
+    final m = (s / 60).floor();
+    final rs = (s - m * 60).floor();
+    return "${m}m ${rs}s ago";
+  }
 
-    // Determine the appropriate icon to display based on the device's display name
-    if (d.displayName.contains('AirTag')) {
-      icon = Icons.apple;
-    } else if (d.displayName.contains('Tile')) {
-      icon = Icons.location_searching;
-    } else if (d.displayName.contains('Samsung')) {
-      icon = Icons.radio_button_checked;
-    } else {
-      icon = Icons.bluetooth;
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => SearchPage(device: d)));
-        },
-        leading: Icon(icon),
-        title: Text(
-          d.displayName,
-          style: const TextStyle(
-            fontFamily: 'Montserrat',
-            fontWeight: FontWeight.w600,
+  Widget _deviceCard(BuildContext context, TrackerDevice d) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => SearchPage(device: d)),
+      ),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(
+                Icons.signal_cellular_alt_rounded,
+                size: 44,
+                color: _markColor(DeviceMarks.getMark(d.signature)),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      d.displayName,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Distance: ${d.distanceFeet.toStringAsFixed(1)} ft',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      'RSSI: ${d.rssi} dBm • Seen ${_ageLabel(d.lastSeenMs)}',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: List.generate(
+                        5,
+                        (i) => Icon(
+                          Icons.signal_cellular_alt,
+                          size: 18,
+                          color: i < _bars(d.smoothedRssi.round())
+                              ? Colors.green
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-        subtitle: Text(
-          'Last seen ${(DateTime.now().millisecondsSinceEpoch - d.lastSeenMs) ~/ 1000}s ago',
+      ),
+    );
+  }
+
+  Color _markColor(DeviceMark? mark) {
+    switch (mark ?? DeviceMark.nonsuspect) {
+      case DeviceMark.suspect:
+        return const Color(0xFFD9534F);
+      case DeviceMark.friendly:
+        return const Color(0xFF2E7D32);
+      case DeviceMark.nonsuspect:
+        return const Color(0xFF1500FF);
+    }
+  }
+}
+
+class _MarkTabs extends StatelessWidget {
+  const _MarkTabs();
+  static const _friendly = Color(0xFF2E7D32);
+  static const _suspect = Color(0xFFD9534F);
+  static const _nonsuspect = Color(0xFF1500FF);
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = Colors.grey.shade100;
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.grey.shade300, width: 1),
+      ),
+      child: TabBar(
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        indicator: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.grey.shade300, width: 1),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+              color: Colors.black.withOpacity(0.06),
+            ),
+          ],
         ),
-        trailing: Text(
-          '${d.distance.toStringAsFixed(1)} m',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        labelPadding: EdgeInsets.zero,
+        labelColor: Colors.black,
+        unselectedLabelColor: Colors.grey.shade700,
+        labelStyle: const TextStyle(
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          letterSpacing: 0.2,
         ),
+        unselectedLabelStyle: const TextStyle(
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+        tabs: const [
+          _TabPill(label: 'Suspect', color: _suspect),
+          _TabPill(label: 'Friendly', color: _friendly),
+          _TabPill(label: 'Nonsuspect', color: _nonsuspect),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _TabPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tab(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.signal_cellular_alt_rounded, size: 18, color: color),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
       ),
     );
   }

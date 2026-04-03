@@ -1,5 +1,4 @@
 //For the hamburger menu feature
-
 import 'package:flutter/material.dart';
 import 'quick_start_page.dart';
 import 'advanced_search_help_page.dart';
@@ -9,14 +8,14 @@ import 'reports_page.dart';
 import 'warrent_info_page.dart';
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  final GlobalKey<State<StatefulWidget>>? filtersTileKey;
+  final GlobalKey<State<StatefulWidget>>? reportsTileKey;
+
+  const AppDrawer({super.key, this.filtersTileKey, this.reportsTileKey});
 
   void _open(BuildContext context, Widget page) {
     Navigator.pop(context);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   @override
@@ -67,6 +66,7 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             ListTile(
+              key: filtersTileKey,
               leading: const Icon(Icons.tune),
               title: const Text("Filters"),
               onTap: () {
@@ -78,6 +78,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             ListTile(
+              key: reportsTileKey,
               leading: const Icon(Icons.description_outlined),
               title: const Text("Reports"),
               onTap: () {
