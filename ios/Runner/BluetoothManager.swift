@@ -267,8 +267,9 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
 
       // CoreBluetooth AirTag Checks
       if cid == 0x004C {
-        if rawUpper.hasPrefix("1EFF4C001219") || rawUpper.hasPrefix("1EFF4C000215")
-          || rawUpper.hasPrefix("1AFF4C000215")
+        if rawUpper.hasPrefix("4C001210") || rawUpper.hasPrefix("4C001219")
+          || rawUpper.hasPrefix("4C000215") || rawUpper.hasPrefix("004C1210")
+          || rawUpper.hasPrefix("004C1219")
         {
           return "AIRTAG"
         }

@@ -80,28 +80,30 @@ class QuickStartPage extends StatelessWidget {
             'Review nearby detections',
             'Look at the main results first. Focus on suspicious devices with stronger RSSI and shorter estimated distance.',
           ),
+          /*
           _step(
             6,
             'Open Show All Devices / Advanced Scanner',
             'Use the advanced view to inspect more device details such as RSSI, estimated distance, UUID, and device type.',
           ),
+          */
           _step(
-            7,
+            6,
             'Tap a device for more details',
             'Open a device entry to inspect it further and decide whether it should be treated as undesignated, friendly, or suspect.',
           ),
           _step(
-            8,
+            7,
             'Use filters if needed',
             'Adjust distance, RSSI, and sorting if the area has too many devices or if you want to narrow results.',
           ),
           _step(
-            9,
+            8,
             'Repeat scan closer to the suspected object',
             'Run another scan from a closer position to compare signal strength and confirm whether the device remains nearby.',
           ),
           _step(
-            10,
+            9,
             'Document findings',
             'Record the device type shown by the app, the UUID displayed in the app, the signal strength, and the context of where it was found.',
           ),

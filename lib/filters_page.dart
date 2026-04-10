@@ -14,8 +14,6 @@ class _FiltersPageState extends State<FiltersPage> {
   late double mainDistance;
   late double advancedDistance;
   late double minRssi;
-  // late bool hideConnectable;
-
   late bool filterByRssi;
   late int rssiThreshold;
   late SortMode sortMode;
@@ -33,7 +31,6 @@ class _FiltersPageState extends State<FiltersPage> {
     sortMode = s.sortMode;
   }
 
-  // Helper method to apply filters and close the page automatically
   void _applyAndPop() {
     FiltersModel.apply(
       maxMainDistanceFt: mainDistance,
@@ -44,6 +41,17 @@ class _FiltersPageState extends State<FiltersPage> {
       sortMode: sortMode,
     );
     Navigator.pop(context);
+  }
+
+  void _applyWithoutPopping() {
+    FiltersModel.apply(
+      maxMainDistanceFt: mainDistance,
+      maxAdvancedDistanceFt: advancedDistance,
+      minRssi: minRssi.round(),
+      filterByRssi: filterByRssi,
+      rssiThreshold: rssiThreshold,
+      sortMode: sortMode,
+    );
   }
 
   // Build the UI for applying the filters
@@ -68,30 +76,10 @@ class _FiltersPageState extends State<FiltersPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // PASSIVE PROFILE
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.radar),
-                    label: const Text('Passive (Stalking Search)'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        mainDistance = 50.0;
-                        advancedDistance = 200.0;
-                        minRssi = -100.0;
-                        filterByRssi = true;
-                        rssiThreshold = -90; // Filter signals -90 and lower
-                      });
-                      _applyAndPop();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-
-                  // ACTIVE PROFILE
+                  // PACKAGE MISSION
                   ElevatedButton.icon(
                     icon: const Icon(Icons.search),
-                    label: const Text('Active (Package Search)'),
+                    label: const Text('Package Mission'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 48),
                     ),
@@ -101,9 +89,41 @@ class _FiltersPageState extends State<FiltersPage> {
                         advancedDistance = 40.0;
                         minRssi = -100.0;
                         filterByRssi = true;
-                        rssiThreshold = -70; // Strict cutoff for packages
+                        rssiThreshold = -70;
+                        sortMode = SortMode.recent;
                       });
-                      _applyAndPop();
+                      _applyWithoutPopping();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Package Mission filters applied.'),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+
+                  // HUNTING MISSION
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.radar),
+                    label: const Text('Hunting Mission'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        mainDistance = 50.0;
+                        advancedDistance = 200.0;
+                        minRssi = -100.0;
+                        filterByRssi = true;
+                        rssiThreshold = -90;
+                        sortMode = SortMode.recent;
+                      });
+                      _applyWithoutPopping();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Hunting Mission filters applied.'),
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -220,7 +240,7 @@ class _FiltersPageState extends State<FiltersPage> {
 
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: _applyAndPop, // Uses the new helper method
+            onPressed: _applyAndPop,
             child: const Text('Apply Filters'),
           ),
         ],

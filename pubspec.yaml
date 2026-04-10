@@ -37,7 +37,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/leo_splash.png
-    - assets/LeoPhoto.jpg
+    - assets/LeoPhoto.png
     - assets/airtag.png
     - assets/smarttag.png
     - assets/tile.png

@@ -15,6 +15,7 @@ import 'filters.dart';
 import 'reports_store.dart';
 import 'search_page.dart';
 import 'app_tutorial.dart';
+import 'advanced_scanner_view.dart';
 
 // Initialize the app and manage the overall state
 void main() async {
@@ -126,10 +127,6 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showMissionPrompt();
-    });
-
     _fadeCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 650),
@@ -158,6 +155,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   }
 
   void _showMissionPrompt() {
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -318,7 +316,13 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   Future<void> _checkFirstLaunchTutorial() async {
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('seen_quick_start_guide') ?? false;
-    if (seen || !mounted) return;
+    if (seen) {
+      // Must pop after the frame to avoid layout errors
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showMissionPrompt();
+      });
+      return;
+    }
     if (_materialContext == null) return;
     await _showTutorialStartPrompt();
   }
@@ -355,6 +359,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
                 if (_navigatorKey.currentState != null) {
                   _navigatorKey.currentState!.pop();
                 }
+                _showMissionPrompt();
               },
               child: const Text('Skip'),
             ),
@@ -379,12 +384,16 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     final coachContext = _materialContext;
     if (coachContext == null || targets.isEmpty) return false;
     final completer = Completer<bool>();
+
     final coach = TutorialCoachMark(
       targets: targets,
       colorShadow: Colors.black,
       opacityShadow: 0.78,
       paddingFocus: 10,
       hideSkip: true,
+      onClickTarget: (target) {
+        // Tapping the target advances the tutorial
+      },
       onFinish: () {
         if (!completer.isCompleted) completer.complete(true);
       },
@@ -400,7 +409,6 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
 
   Future<void> _startQuickGuide() async {
     if (_tutorialRunning || !mounted) return;
-    _tutorialRunning = true;
 
     if (scanning) {
       await BleBridge.stopScan();
@@ -413,8 +421,13 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
       });
     }
 
-    setState(() => pageIndex = 0);
-    await Future.delayed(const Duration(milliseconds: 900));
+    setState(() {
+      pageIndex = 0;
+      _tutorialRunning = true;
+    });
+
+    // Give UI time to paint the dummy widget
+    await Future.delayed(const Duration(milliseconds: 600));
 
     await _runDistanceTutorial();
     if (!mounted) return;
@@ -431,10 +444,15 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     await _runDrawerTutorial();
     if (!mounted) return;
 
-    setState(() => pageIndex = 0);
-    _tutorialRunning = false;
+    setState(() {
+      pageIndex = 0;
+      _tutorialRunning = false;
+    });
+
+    _showMissionPrompt();
   }
 
+  // Force sequence: scan button -> tracker list -> open tracker card
   Future<void> _runDistanceTutorial() async {
     await _showCoach([
       tutorialTarget(
@@ -449,7 +467,6 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         title: 'Detected tags',
         body:
             'Tags will show up here along with signal strength, name, and distance.',
-        yOffset: 110,
       ),
       tutorialTarget(
         key: _firstTrackerCardKey,
@@ -480,7 +497,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         id: 'identify_tabs',
         title: 'Identify page',
         body:
-            'Trackers will be categorized here once the user picks a category on the other page.',
+            'Trackers will be categorized here once you pick a category on the previous page.',
       ),
     ]);
   }
@@ -494,12 +511,14 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         id: 'drawer_filters',
         title: 'Filter options',
         body: 'Use these filter options to control what trackers are shown.',
+        align: ContentAlign.bottom,
       ),
       tutorialTarget(
         key: _drawerReportsKey,
         id: 'drawer_reports',
         title: 'Reports page',
         body: 'Suspect tracker reports will show up here.',
+        align: ContentAlign.bottom,
       ),
     ]);
     if (!mounted || _materialContext == null) return;
@@ -527,7 +546,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
               d.isLikelyAirTag ||
               d.isLikelyTile ||
               d.isLikelySamsung ||
-              // d.isPossibleAirTag ||
+              d.isPossibleAirTag ||
               d.kind.contains('APPLE'),
         )
         .toList();
@@ -598,9 +617,30 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
                   drawer: AppDrawer(
                     filtersTileKey: _drawerFiltersKey,
                     reportsTileKey: _drawerReportsKey,
+                    tutorialMode: _tutorialRunning,
                     onReplayTutorial: () {
                       Navigator.pop(context); // close drawer
                       _startQuickGuide();
+                    },
+                    onShowAllDevices: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => FractionallySizedBox(
+                          heightFactor: 0.92,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(18),
+                            ),
+                            child: AdvancedScannerView(
+                              devices: advancedDevices,
+                              scanning: scanning,
+                              lastScanTime: lastScanTime,
+                            ),
+                          ),
+                        ),
+                      );
                     },
                   ),
                   appBar: AppBar(

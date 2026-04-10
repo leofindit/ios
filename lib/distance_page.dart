@@ -3,9 +3,9 @@
 import 'package:flutter/material.dart';
 import 'models.dart';
 import 'search_page.dart';
-import 'advanced_scanner_view.dart';
 import 'device_marks.dart';
 import 'filters.dart';
+import 'app_tutorial.dart';
 
 // The DistancePage widget displays a list of nearby tracker devices with their estimated distances and RSSI values
 // Also provides buttons to show all detected devices and to start or stop scanning for devices
@@ -129,92 +129,43 @@ class DistancePage extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(
-                  Icons.search,
-                  size: 22,
-                  color: Colors.blueAccent,
-                ),
-                label: const Text(
-                  'Show All Devices',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+              TutorialBlinker(
+                isTutorialMode: tutorialMode,
+                child: ElevatedButton.icon(
+                  key: scanButtonKey,
+                  icon: Icon(
+                    scanning ? Icons.stop : Icons.play_arrow,
+                    size: 28,
                     color: Colors.blueAccent,
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade50,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    side: BorderSide(
-                      color: Colors.blueAccent.withOpacity(0.25),
-                      width: 1.2,
+                  label: Text(
+                    scanning ? 'Stop Scan' : 'Start Scan',
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 19,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blueAccent,
                     ),
                   ),
-                ),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => FractionallySizedBox(
-                      heightFactor: 0.92,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(18),
-                        ),
-                        child: AdvancedScannerView(
-                          devices: allTrackedDevices,
-                          scanning: scanning,
-                          lastScanTime: lastScanTime,
-                        ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade50,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 30,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      side: BorderSide(
+                        color: Colors.blueAccent.withOpacity(0.25),
+                        width: 1.2,
                       ),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              ElevatedButton.icon(
-                key: scanButtonKey,
-                icon: Icon(
-                  scanning ? Icons.stop : Icons.play_arrow,
-                  size: 28,
-                  color: Colors.blueAccent,
-                ),
-                label: Text(
-                  scanning ? 'Stop Scan' : 'Start Scan',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blueAccent,
                   ),
+                  onPressed: () async {
+                    await onRescan();
+                  },
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade50,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 30,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    side: BorderSide(
-                      color: Colors.blueAccent.withOpacity(0.25),
-                      width: 1.2,
-                    ),
-                  ),
-                ),
-                onPressed: () async {
-                  await onRescan();
-                },
               ),
               const SizedBox(height: 10),
               Text(
@@ -233,145 +184,151 @@ class DistancePage extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Container(
-            key: trackerListKey,
-            child: ValueListenableBuilder<int>(
-              valueListenable: DeviceMarks.version,
-              builder: (_, __, ___) {
-                final visibleTrack = track.where((d) {
-                  final mark = DeviceMarks.getMark(d.signature);
-                  return mark == null || mark == DeviceMark.suspect;
-                }).toList();
+          child: TutorialBlinker(
+            isTutorialMode: tutorialMode,
+            child: Container(
+              key: trackerListKey,
+              child: ValueListenableBuilder<int>(
+                valueListenable: DeviceMarks.version,
+                builder: (_, __, ___) {
+                  final visibleTrack = track.where((d) {
+                    final mark = DeviceMarks.getMark(d.signature);
+                    return mark == null || mark == DeviceMark.suspect;
+                  }).toList();
 
-                return RefreshIndicator(
-                  onRefresh: onRefresh,
-                  child: visibleTrack.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 100),
-                            Center(
-                              child: Text(
-                                'No trackers detected',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: visibleTrack.length,
-                          itemBuilder: (_, i) {
-                            final d = visibleTrack[i];
-                            final mark = DeviceMarks.getMark(d.signature);
-                            final isMarked = mark != null;
-
-                            return GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => SearchPage(
-                                    device: d,
-                                    tutorialMode: tutorialMode,
+                  return RefreshIndicator(
+                    onRefresh: onRefresh,
+                    child: visibleTrack.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: const [
+                              SizedBox(height: 100),
+                              Center(
+                                child: Text(
+                                  'No trackers detected',
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey,
                                   ),
                                 ),
                               ),
-                              child: Opacity(
-                                opacity: isMarked ? 0.45 : 1.0,
-                                child: Card(
-                                  key: i == 0 ? firstTrackerCardKey : null,
-                                  color: isMarked ? Colors.grey.shade200 : null,
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 18,
-                                    vertical: 13,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(20),
-                                    child: Row(
-                                      children: [
-                                        // uses the tracker icons
-                                        buildTrackerImage(d, size: 46),
-                                        const SizedBox(width: 20),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                d.displayName,
-                                                style: TextStyle(
-                                                  fontFamily: 'Inter',
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 22,
-                                                  color: isMarked
-                                                      ? Colors.grey
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                'UUID: ...${d.shortUuid}',
-                                                style: TextStyle(
-                                                  color: isMarked
-                                                      ? Colors.grey
-                                                      : Colors.black,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                              Text(
-                                                'RSSI: ${d.rssi} dBm',
-                                                style: TextStyle(
-                                                  color: isMarked
-                                                      ? Colors.grey
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Distance: ${d.distanceFeet.toStringAsFixed(1)} ft',
-                                                style: TextStyle(
-                                                  color: isMarked
-                                                      ? Colors.grey
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                children: List.generate(
-                                                  5,
-                                                  (idx) => Icon(
-                                                    Icons.signal_cellular_alt,
-                                                    size: 20,
-                                                    color:
-                                                        idx <
-                                                            _bars(
-                                                              d.smoothedRssi
-                                                                  .round(),
-                                                            )
-                                                        ? (isMarked
-                                                              ? Colors.grey
-                                                              : Colors.green)
-                                                        : Colors.grey.shade300,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                            ],
+                          )
+                        : ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: visibleTrack.length,
+                            itemBuilder: (_, i) {
+                              final d = visibleTrack[i];
+                              final mark = DeviceMarks.getMark(d.signature);
+                              final isMarked = mark != null;
+
+                              return GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => SearchPage(
+                                      device: d,
+                                      tutorialMode: tutorialMode,
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                );
-              },
+                                child: Opacity(
+                                  opacity: isMarked ? 0.45 : 1.0,
+                                  child: Card(
+                                    key: i == 0 ? firstTrackerCardKey : null,
+                                    color: isMarked
+                                        ? Colors.grey.shade200
+                                        : null,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 13,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(20),
+                                      child: Row(
+                                        children: [
+                                          buildTrackerImage(d, size: 46),
+                                          const SizedBox(width: 20),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  d.displayName,
+                                                  style: TextStyle(
+                                                    fontFamily: 'Inter',
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 22,
+                                                    color: isMarked
+                                                        ? Colors.grey
+                                                        : Colors.black,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'UUID: ...${d.shortUuid}',
+                                                  style: TextStyle(
+                                                    color: isMarked
+                                                        ? Colors.grey
+                                                        : Colors.black,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'RSSI: ${d.rssi} dBm',
+                                                  style: TextStyle(
+                                                    color: isMarked
+                                                        ? Colors.grey
+                                                        : Colors.black,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Distance: ${d.distanceFeet.toStringAsFixed(1)} ft',
+                                                  style: TextStyle(
+                                                    color: isMarked
+                                                        ? Colors.grey
+                                                        : Colors.black,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Row(
+                                                  children: List.generate(
+                                                    5,
+                                                    (idx) => Icon(
+                                                      Icons.signal_cellular_alt,
+                                                      size: 20,
+                                                      color:
+                                                          idx <
+                                                              _bars(
+                                                                d.smoothedRssi
+                                                                    .round(),
+                                                              )
+                                                          ? (isMarked
+                                                                ? Colors.grey
+                                                                : Colors.green)
+                                                          : Colors
+                                                                .grey
+                                                                .shade300,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  );
+                },
+              ),
             ),
           ),
         ),

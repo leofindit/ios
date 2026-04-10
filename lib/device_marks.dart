@@ -66,9 +66,20 @@ class DeviceMarks {
   static DeviceMark? getMark(String signature) => _marks[signature]?.mark;
   static String? getName(String signature) => _marks[signature]?.customName;
 
-  static void setMark(String signature, DeviceMark mark) {
+  static void setMark(String signature, DeviceMark? mark) {
     final existingName = _marks[signature]?.customName;
-    _marks[signature] = DeviceMetadata(mark, existingName);
+    if (mark == null) {
+      if (existingName == null) {
+        _marks.remove(signature); // totally clean it up if no name saved
+      } else {
+        _marks[signature] = DeviceMetadata(
+          DeviceMark.undesignated,
+          existingName,
+        );
+      }
+    } else {
+      _marks[signature] = DeviceMetadata(mark, existingName);
+    }
     version.value++;
     _save();
   }

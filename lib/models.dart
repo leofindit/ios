@@ -51,12 +51,11 @@ class TrackerDevice {
       kind == 'SAMSUNG_DEVICE' ||
       kind == 'SAMSUNG_SMARTTAG';
 
-  /*
   // Fallback heuristic for Apple devices due to CoreBluetooth masking
   bool get isPossibleAirTag {
     final n = localName.toLowerCase().trim();
     if (isLikelyAirTag) return true;
-    final looksUnnamed = n.isEmpty || n == 'unknown';
+    final looksUnnamed = n.isEmpty || n == 'undesignated';
 
     final notObviousAppleHost =
         !n.contains('iphone') &&
@@ -74,7 +73,7 @@ class TrackerDevice {
         rawFrame.toLowerCase().contains('4c00') ||
         serviceUuids.isNotEmpty;
 
-    return (kind == 'APPLE_DEVICE' || kind == 'UNKNOWN') &&
+    return (kind == 'APPLE_DEVICE' || kind == 'UNDESIGNATED') &&
         looksUnnamed &&
         !isConnectable &&
         hasTrackerLikePresence &&
@@ -82,7 +81,6 @@ class TrackerDevice {
         hasAppleLikeSignature &&
         notObviousAppleHost;
   }
-  */
 
   bool get isFound => distanceFeet <= 0.10;
 
@@ -95,8 +93,7 @@ class TrackerDevice {
     if (isLikelyAirTag) return 'Apple AirTag';
     if (isLikelyTile) return 'Life360 Tile';
     if (isLikelySamsung) return 'Samsung SmartTag';
-    if (kind.contains('APPLE'))
-      return 'Apple Find My'; // || isPossibleAirTag) return 'Apple Find My';
+    if (kind.contains('APPLE') || isPossibleAirTag) return 'Apple Find My';
 
     return 'Undesignated Tracker';
   }
@@ -161,7 +158,7 @@ Widget buildTrackerImage(TrackerDevice d, {double size = 44}) {
     assetName = 'assets/tile.png';
   } else if (d.isLikelySamsung) {
     assetName = 'assets/smarttag.png';
-  } else if (d.kind.contains('APPLE')){ // || d.isPossibleAirTag) {
+  } else if (d.kind.contains('APPLE') || d.isPossibleAirTag) {
     assetName = 'assets/airtag.png';
   }
 

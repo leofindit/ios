@@ -10,17 +10,22 @@ import 'tips_page.dart';
 import 'filters_page.dart';
 import 'reports_page.dart';
 import 'warrent_info_page.dart';
+import 'app_tutorial.dart';
 
 class AppDrawer extends StatefulWidget {
   final GlobalKey<State<StatefulWidget>>? filtersTileKey;
   final GlobalKey<State<StatefulWidget>>? reportsTileKey;
   final VoidCallback? onReplayTutorial;
+  final VoidCallback? onShowAllDevices;
+  final bool tutorialMode;
 
   const AppDrawer({
     super.key,
     this.filtersTileKey,
     this.reportsTileKey,
     this.onReplayTutorial,
+    this.onShowAllDevices,
+    this.tutorialMode = false,
   });
 
   @override
@@ -104,23 +109,40 @@ class _AppDrawerState extends State<AppDrawer> {
           children: [
             Expanded(
               child: ListView(
+                padding: const EdgeInsets.only(
+                  top: 20,
+                ), // Reduced gap at the top
                 children: [
-                  const DrawerHeader(
-                    child: Text(
-                      'LeoFindIt',
+                  ListTile(
+                    leading: const Icon(
+                      Icons.search,
+                      color: Colors.blueAccent,
+                      size: 28,
+                    ),
+                    title: const Text(
+                      "Show All Devices",
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
                       ),
                     ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (widget.onShowAllDevices != null) {
+                        widget.onShowAllDevices!();
+                      }
+                    },
                   ),
+                  const Divider(height: 24, thickness: 1),
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 18, 16, 10),
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Text(
                       "Help & Guidance",
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
@@ -155,40 +177,51 @@ class _AppDrawerState extends State<AppDrawer> {
                     title: const Text("Tips"),
                     onTap: () => _open(context, const TipsPage()),
                   ),
-                  const Divider(),
+                  const Divider(height: 24, thickness: 1),
                   const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 18, 16, 10),
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Text(
                       "Tools",
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
-                  ListTile(
-                    key: widget.filtersTileKey,
-                    leading: const Icon(Icons.tune),
-                    title: const Text("Filters"),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const FiltersPage()),
-                      );
-                    },
+                  TutorialBlinker(
+                    isTutorialMode: widget.tutorialMode,
+                    child: ListTile(
+                      key: widget.filtersTileKey,
+                      leading: const Icon(Icons.tune),
+                      title: const Text("Filters"),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const FiltersPage(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  ListTile(
-                    key: widget.reportsTileKey,
-                    leading: const Icon(Icons.description_outlined),
-                    title: const Text("Reports"),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ReportsPage()),
-                      );
-                    },
+                  TutorialBlinker(
+                    isTutorialMode: widget.tutorialMode,
+                    child: ListTile(
+                      key: widget.reportsTileKey,
+                      leading: const Icon(Icons.description_outlined),
+                      title: const Text("Reports"),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ReportsPage(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

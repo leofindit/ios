@@ -8,6 +8,7 @@ TargetFocus tutorialTarget({
   required String body,
   ContentAlign align = ContentAlign.bottom,
   double yOffset = 0,
+  bool showSkip = true,
 }) {
   return TargetFocus(
     identify: id,
@@ -61,10 +62,11 @@ TargetFocus tutorialTarget({
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: controller.skip,
-                        child: const Text('Skip'),
-                      ),
+                      if (showSkip)
+                        TextButton(
+                          onPressed: controller.skip,
+                          child: const Text('Skip'),
+                        ),
                       const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: controller.next,
@@ -80,4 +82,64 @@ TargetFocus tutorialTarget({
       ),
     ],
   );
+}
+
+class TutorialBlinker extends StatefulWidget {
+  final Widget child;
+  final bool isTutorialMode;
+
+  const TutorialBlinker({
+    super.key,
+    required this.child,
+    required this.isTutorialMode,
+  });
+
+  @override
+  State<TutorialBlinker> createState() => _TutorialBlinkerState();
+}
+
+class _TutorialBlinkerState extends State<TutorialBlinker>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+    _anim = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+
+    if (widget.isTutorialMode) {
+      _ctrl.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(TutorialBlinker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isTutorialMode && !_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    } else if (!widget.isTutorialMode && _ctrl.isAnimating) {
+      _ctrl.reset();
+      _ctrl.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isTutorialMode) return widget.child;
+    return FadeTransition(opacity: _anim, child: widget.child);
+  }
 }

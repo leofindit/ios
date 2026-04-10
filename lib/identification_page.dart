@@ -150,11 +150,7 @@ class IdentificationPage extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           child: Row(
             children: [
-              Icon(
-                Icons.signal_cellular_alt_rounded,
-                size: 44,
-                color: _markColor(DeviceMarks.getMark(d.signature)),
-              ),
+              buildTrackerImage(d, size: 44),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
@@ -285,18 +281,32 @@ class _MarkTabs extends StatelessWidget {
 class _TabPill extends StatelessWidget {
   final String label;
   final Color color;
+
   const _TabPill({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Tab(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.signal_cellular_alt_rounded, size: 18, color: color),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.signal_cellular_alt_rounded, size: 14, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontFamily: 'Inter', fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
