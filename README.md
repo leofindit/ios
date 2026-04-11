@@ -87,7 +87,7 @@ Open ios/Runner.xcworkspace
 3. Press Run
 
 ## Privacy Policy
-https://leofindit-ios.github.io/LEOFindIt_iOS/
+[https://leofindit-ios.github.io/LEOFindIt_iOS/](https://leofindit.github.io/ios/)
 
 ## Documentation
 
