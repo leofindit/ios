@@ -32,7 +32,6 @@ class LeoFindIt extends StatefulWidget {
   State<LeoFindIt> createState() => _LeoFindItState();
 }
 
-// List of detected devices, scanning status, and user interactions such as starting/stopping scans and navigating between pages
 class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   final Map<String, TrackerDevice> _devicesBySig = {};
 
@@ -55,7 +54,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   late Animation<double> _fadeAnim;
   late AnimationController _blinkCtrl;
 
-  // 10-Second Sorting Validity State
+    // 10-Second Sorting Validity State
   List<String> _displayOrder = [];
   DateTime _lastSortTime = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -64,7 +63,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
   final GlobalKey _scanButtonKey = GlobalKey();
   final GlobalKey _trackerListKey = GlobalKey();
   final GlobalKey _firstTrackerCardKey = GlobalKey();
-  final GlobalKey _identifyTabsKey = GlobalKey();
+  final GlobalKey _classifyTabsKey = GlobalKey();
   final GlobalKey _drawerButtonKey = GlobalKey();
   final GlobalKey _drawerFiltersKey = GlobalKey();
   final GlobalKey _drawerReportsKey = GlobalKey();
@@ -114,7 +113,6 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     _scanTimer?.cancel();
     _scanSecondsElapsed = 0;
   }
-
   // Only clears devices from the main view, keeping advanced scanner intact
   Future<void> _clearMainList() async {
     setState(() {
@@ -122,7 +120,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     });
   }
 
-  // Toggle the BLE scanning state when the user initiates a scan or stops it, managing the scan session and updating the UI accordingly
+    // Toggle the BLE scanning state when the user initiates a scan or stops it, managing the scan session and updating the UI accordingly
   @override
   void initState() {
     super.initState();
@@ -226,7 +224,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
       ),
     );
   }
-
+  
   // 10-Second RSSI validity sorting
   List<TrackerDevice> get devices {
     final now = DateTime.now();
@@ -260,7 +258,6 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
       return;
     }
 
-    // Start the BLE scan and handle the scanning state, including error handling if the scan fails to start, and updating the UI to reflect the current scanning status
     final mySession = ++_scanSession;
     try {
       final ok = await BleBridge.startScan();
@@ -315,7 +312,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
 
   Future<void> _checkFirstLaunchTutorial() async {
     final prefs = await SharedPreferences.getInstance();
-    final seen = prefs.getBool('seen_quick_start_guide') ?? false;
+    final seen = prefs.getBool('replay_tutorial') ?? false;
     if (seen) {
       // Must pop after the frame to avoid layout errors
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -329,7 +326,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
 
   Future<void> _markTutorialSeen() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('seen_quick_start_guide', true);
+    await prefs.setBool('replay_tutorial', true);
   }
 
   Future<void> _showTutorialStartPrompt() async {
@@ -438,7 +435,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     setState(() => pageIndex = 1);
     await Future.delayed(const Duration(milliseconds: 900));
 
-    await _runIdentifyTutorial();
+    await _runClassifyTutorial();
     if (!mounted) return;
 
     await _runDrawerTutorial();
@@ -460,6 +457,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         id: 'scan_button',
         title: 'Start and stop scanning',
         body: 'Press Scan here to stop and start device scanning.',
+        showSkip: false,
       ),
       tutorialTarget(
         key: _trackerListKey,
@@ -467,12 +465,15 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         title: 'Detected tags',
         body:
             'Tags will show up here along with signal strength, name, and distance.',
+        yOffset: 110,
+        showSkip: false,
       ),
       tutorialTarget(
         key: _firstTrackerCardKey,
         id: 'open_tracker',
         title: 'Open a tracker',
         body: 'You can click a tag to open a more detailed page.',
+        showSkip: false,
       ),
     ]);
   }
@@ -490,14 +491,15 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _runIdentifyTutorial() async {
+  Future<void> _runClassifyTutorial() async {
     await _showCoach([
       tutorialTarget(
-        key: _identifyTabsKey,
-        id: 'identify_tabs',
-        title: 'Identify page',
+        key: _classifyTabsKey,
+        id: 'classify_tabs',
+        title: 'Classification page',
         body:
             'Trackers will be categorized here once you pick a category on the previous page.',
+        showSkip: false,
       ),
     ]);
   }
@@ -512,6 +514,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         title: 'Filter options',
         body: 'Use these filter options to control what trackers are shown.',
         align: ContentAlign.bottom,
+        showSkip: false,
       ),
       tutorialTarget(
         key: _drawerReportsKey,
@@ -519,6 +522,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
         title: 'Reports page',
         body: 'Suspect tracker reports will show up here.',
         align: ContentAlign.bottom,
+        showSkip: false,
       ),
     ]);
     if (!mounted || _materialContext == null) return;
@@ -606,7 +610,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
                 ),
                 IdentificationPage(
                   devices: _tutorialRunning ? tutorialTrackedDevices : devices,
-                  identifyTabsKey: _identifyTabsKey,
+                  classifyTabsKey: _classifyTabsKey,
                 ),
               ];
 
@@ -619,7 +623,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
                     reportsTileKey: _drawerReportsKey,
                     tutorialMode: _tutorialRunning,
                     onReplayTutorial: () {
-                      Navigator.pop(context); // close drawer
+                      Navigator.pop(context);
                       _startQuickGuide();
                     },
                     onShowAllDevices: () {
@@ -715,7 +719,7 @@ class _LeoFindItState extends State<LeoFindIt> with TickerProviderStateMixin {
                         ),
                         BottomNavigationBarItem(
                           icon: Icon(Icons.list_alt),
-                          label: 'Identify',
+                          label: 'Classification',
                         ),
                       ],
                     ),

@@ -454,10 +454,10 @@ class _SearchPageState extends State<SearchPage> {
                 ),
                 const SizedBox(height: 18),
                 ElevatedButton.icon(
-                  label: const Text('Mark as Found'),
+                  label: const Text('Found'), // Mark as Found
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blueAccent,
                   ),
                   onPressed: () => _markFound(d),
                 ),

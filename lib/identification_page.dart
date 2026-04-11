@@ -8,11 +8,11 @@ import 'search_page.dart';
 // displays a list of detected tracker devices categorized as Friendly, undesignated, or Suspect
 class IdentificationPage extends StatelessWidget {
   final List<TrackerDevice> devices;
-  final GlobalKey? identifyTabsKey;
+  final GlobalKey? classifyTabsKey;
 
   const IdentificationPage({
     required this.devices,
-    this.identifyTabsKey,
+    this.classifyTabsKey,
     super.key,
   });
 
@@ -54,7 +54,7 @@ class IdentificationPage extends StatelessWidget {
           child: Column(
             children: [
               Padding(
-                key: identifyTabsKey,
+                key: classifyTabsKey,
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
                 child: const _MarkTabs(),
               ),

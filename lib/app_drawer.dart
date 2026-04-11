@@ -47,7 +47,7 @@ class _AppDrawerState extends State<AppDrawer> {
     final info = await PackageInfo.fromPlatform();
     if (mounted) {
       setState(() {
-        _appVersion = '${info.version}+${info.buildNumber}';
+        _appVersion = info.version; //'+${info.buildNumber}';
       });
     }
   }
@@ -66,8 +66,8 @@ class _AppDrawerState extends State<AppDrawer> {
     });
 
     // --- STORE LINK LOGIC ---
-    // IMPORTANT: Replace 'YOUR_APP_STORE_ID' with your actual 10-digit Apple App Store ID
-    // Replace 'com.leofindit.app' with your Google Play Store package name if different.
+    // ios: Replace 'YOUR_APP_STORE_ID' with your actual 10-digit Apple App Store ID
+    // android: Replace 'com.leofindit.app' with your Google Play Store package name if different.
     const String appStoreId = 'YOUR_APP_STORE_ID';
     const String playStoreId = 'com.leofindit.app';
 
@@ -113,6 +113,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   top: 20,
                 ), // Reduced gap at the top
                 children: [
+                  /*
                   ListTile(
                     leading: const Icon(
                       Icons.search,
@@ -135,6 +136,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     },
                   ),
                   const Divider(height: 24, thickness: 1),
+                  */
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Text(
@@ -152,17 +154,6 @@ class _AppDrawerState extends State<AppDrawer> {
                     onTap: () => _open(context, const QuickStartPage()),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.replay),
-                    title: const Text("Replay App Tutorial"),
-                    onTap: () async {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool('seen_quick_start_guide', false);
-                      if (widget.onReplayTutorial != null) {
-                        widget.onReplayTutorial!();
-                      }
-                    },
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.help_outline),
                     title: const Text("Advanced Search"),
                     onTap: () => _open(context, const AdvancedSearchHelpPage()),
@@ -176,6 +167,17 @@ class _AppDrawerState extends State<AppDrawer> {
                     leading: const Icon(Icons.lightbulb_outline),
                     title: const Text("Tips"),
                     onTap: () => _open(context, const TipsPage()),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.info),
+                    title: const Text("Tutorial"),
+                    onTap: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('replay_tutorial', false);
+                      if (widget.onReplayTutorial != null) {
+                        widget.onReplayTutorial!();
+                      }
+                    },
                   ),
                   const Divider(height: 24, thickness: 1),
                   const Padding(

@@ -31,7 +31,7 @@ class AdvancedSearchHelpPage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Advanced Search / Filter Instructions',
+            'Filter Instructions',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),

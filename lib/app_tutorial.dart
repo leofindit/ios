@@ -62,11 +62,12 @@ TargetFocus tutorialTarget({
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      /*
                       if (showSkip)
                         TextButton(
                           onPressed: controller.skip,
                           child: const Text('Skip'),
-                        ),
+                        ),*/
                       const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: controller.next,
