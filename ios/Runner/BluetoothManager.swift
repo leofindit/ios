@@ -132,7 +132,7 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     )
 
     print(
-      "🟢 [iOS BLE] kind=\(kind) | name='\(localName)' | rssi=\(rssi) | smooth=\(smoothed) | connectable=\(isConnectable) | services=\(serviceUuidStrings) | mfg=\(rawFrame) | UUID=\(signature)"
+      "[iOS BLE] kind=\(kind) | name='\(localName)' | rssi=\(rssi) | smooth=\(smoothed) | connectable=\(isConnectable) | services=\(serviceUuidStrings) | mfg=\(rawFrame) | UUID=\(signature)"
     )
 
     let payload: [String: Any] = [
@@ -181,24 +181,18 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
     let serviceStrings = uuids.map { $0.uuidString.uppercased() }
     let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
 
-    // 1. Tile
     if localName.contains("tile") { return "TILE" }
-
-    // 2. Samsung SmartTag
     if localName.contains("smart tag") || localName.contains("smarttag")
       || localName.contains("galaxy smarttag")
     {
       return "SAMSUNG_SMARTTAG"
     }
 
-    // 3. Manufacturer data (most reliable when present)
     if let mfg = manufacturerData, let cid = companyId(from: mfg) {
       let rawUpper = mfg.map { String(format: "%02X", $0) }.joined()
-
       if cid == 0x0131 { return "TILE" }
       if cid == 0x0075 { return "SAMSUNG_SMARTTAG" }
-
-      if cid == 0x004C {  // Apple
+      if cid == 0x004C {
         if rawUpper.hasPrefix("4C001210") || rawUpper.hasPrefix("4C001219")
           || rawUpper.hasPrefix("4C000215") || rawUpper.hasPrefix("004C1210")
           || rawUpper.hasPrefix("004C1219") || rawUpper.hasPrefix("4C001220")
@@ -210,28 +204,22 @@ final class BluetoothManager: NSObject, CBCentralManagerDelegate {
       }
     }
 
-    // 4. Service UUID checks
     if serviceStrings.contains(where: { $0.contains("FD44") }) { return "AIRTAG" }
     if serviceStrings.contains(where: {
       $0.contains("FEED") || $0.contains("FEEC") || $0.contains("FEE7")
     }) {
       return "TILE"
     }
-    if serviceStrings.contains(where: {
-      $0.contains("FD59") || $0.contains("FD5A") || $0.contains("FD5B") || $0.contains("FDE2")
-    }) || localName.contains("samsung") {
+    if localName.contains("samsung")
+      || serviceStrings.contains(where: {
+        $0.contains("FD59") || $0.contains("FD5A") || $0.contains("FD5B") || $0.contains("FDE2")
+      })
+    {
       return "SAMSUNG_DEVICE"
     }
 
-    // 5. Improved empty-name logic (this was the main bug)
-    // AirTags are usually connectable = true when stripped
-    // Samsung phones are usually connectable = false
     if localName.isEmpty {
-      if isConnectable {
-        return "AIRTAG"  // Real stripped AirTags
-      } else {
-        return "APPLE_DEVICE"  // Most other Apple devices (phones, watches, etc.)
-      }
+      return "APPLE_DEVICE"
     }
 
     return "UNDESIGNATED"

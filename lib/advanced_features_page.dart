@@ -1,5 +1,5 @@
-/*
 import 'package:flutter/material.dart';
+
 import 'device_marks.dart';
 import 'hidden_tags_page.dart';
 
@@ -200,4 +200,3 @@ class _ActionCard extends StatelessWidget {
     );
   }
 }
-*/
